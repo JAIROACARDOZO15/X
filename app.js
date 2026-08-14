@@ -994,6 +994,7 @@ function renderSidebar(){
       <div class="menu-item" onclick="renderListaEstudiantes()">Lista de Estudiantes <span>›</span></div>
       <div class="menu-item" onclick="renderCrearCuentaAdmin()">Crear Director / Coordinador <span>›</span></div>
       <div class="menu-item" onclick="renderListaCuentasAdmin()">Ver Directores / Coordinadores <span>›</span></div>
+      <div class="menu-item" onclick="renderZonaPeligro()" style="color:#ffb3b3">⚠️ Zona de Peligro <span>›</span></div>
     `;
     renderHomeDashboard();
   }
@@ -1073,7 +1074,8 @@ function renderHomeDashboard(){
       {icono:"📝", label:"Matricular Estudiante", accion:"renderMatricular()"},
       {icono:"👥", label:"Lista de Estudiantes", accion:"renderListaEstudiantes()"},
       {icono:"🏛️", label:"Crear Director/Coordinador", accion:"renderCrearCuentaAdmin()"},
-      {icono:"📋", label:"Ver Directores/Coordinadores", accion:"renderListaCuentasAdmin()"}
+      {icono:"📋", label:"Ver Directores/Coordinadores", accion:"renderListaCuentasAdmin()"},
+      {icono:"⚠️", label:"Zona de Peligro", accion:"renderZonaPeligro()"}
     ];
   } else if(usuarioActual.rol==="director"){
     tiles = [
@@ -1173,6 +1175,93 @@ function guardarCuentaAdmin(){
   saveCuentasAdmin(cuentas);
 
   renderCrearCuentaAdmin(`✅ Cuenta creada: <b>${rol==='director'?'Director de Escuela':'Coordinador Académico'}</b> de <b>${programa}</b> — usuario <b>${usuario}</b>.`);
+}
+
+/* ======================================================================
+   ZONA DE PELIGRO — borrar datos del semestre para arrancar de cero,
+   SIN tocar cuentas de estudiantes, docentes, directivos, ni el pensum.
+   Requiere escribir una frase exacta + una segunda confirmación, porque
+   es una acción irreversible sobre datos reales de la universidad.
+   ====================================================================== */
+function renderZonaPeligro(){
+  document.getElementById("contenido").innerHTML = `
+    <h2 class="panel-title">⚠️ Zona de Peligro</h2>
+    <div class="aviso aviso-error" style="max-width:600px;text-align:left">
+      Esta acción borra <b>TODO</b> lo relacionado con el semestre actual y el progreso
+      académico de los estudiantes:
+      <ul>
+        <li>Grupos programados y horarios</li>
+        <li>Matrículas y estado de matrículas (abiertas/cerradas)</li>
+        <li>Notas</li>
+        <li>Actas subidas</li>
+        <li>Configuración de evaluación (ítems y pesos) de cada grupo</li>
+        <li>Evaluaciones docentes recibidas</li>
+        <li>Bloqueos por evaluación docente pendiente</li>
+        <li>Historial académico, nivel y normalidad de cada estudiante</li>
+      </ul>
+      <b>NO se borran:</b> las cuentas de estudiantes, docentes, directores/coordinadores,
+      ni el pensum / plan de estudios de los programas.
+      <br><br>
+      <b>Esta acción no se puede deshacer.</b>
+    </div>
+    <p style="font-size:13px;color:#666;max-width:560px">
+      Para confirmar, escribe exactamente <b>BORRAR TODO</b> (en mayúsculas) en el cuadro y luego dale al botón.
+    </p>
+    <input id="confirmTextoBorron" placeholder="Escribe BORRAR TODO" style="max-width:300px">
+    <button class="btn-peligro" onclick="intentarBorronYCuentaNueva()">Borrar y empezar de cero</button>
+  `;
+}
+
+function intentarBorronYCuentaNueva(){
+  const val = (document.getElementById("confirmTextoBorron").value || "").trim();
+  if(val !== "BORRAR TODO"){
+    renderZonaPeligro();
+    document.getElementById("contenido").insertAdjacentHTML("afterbegin",
+      `<div class="aviso aviso-error">Escribe exactamente <b>BORRAR TODO</b> (en mayúsculas) para confirmar.</div>`);
+    return;
+  }
+  pedirConfirmacion(
+    "Última confirmación: se va a borrar TODO el semestre actual y el progreso académico de los estudiantes (grupos, matrículas, notas, actas, evaluaciones, historial). Las cuentas de estudiantes, docentes, directivos y el pensum se conservan. Esta acción NO se puede deshacer. ¿Continuar?",
+    borronYCuentaNueva
+  );
+}
+
+function borronYCuentaNueva(){
+  document.getElementById("contenido").innerHTML = `
+    <h2 class="panel-title">Borrando…</h2>
+    <p>Esto puede tardar unos segundos, no cierres esta pestaña.</p>
+  `;
+
+  const estadoInicial = {};
+  Object.keys(getProgramas()).forEach(p=>{ estadoInicial[p] = false; });
+
+  saveGrupos({});
+  saveMatriculas({});
+  saveEstadoMatriculas(estadoInicial);
+  saveNotas({});
+  saveActas({});
+  saveConfigEvaluacion({});
+  saveEvaluacionesDocente({});
+  saveEvaluacionPendiente({});
+  saveHistorial({});
+  saveNivelesEstudiantes({});
+  saveNormalidadEstudiantes({});
+
+  localStorage.setItem("uan_next_grupo_id","1");
+  localStorage.setItem("uan_next_item_id","1");
+
+  // Da un momento a que terminen de empujarse los borrados a Supabase
+  // antes de mostrar el mensaje final (no bloquea, solo mejora la UX).
+  setTimeout(()=>{
+    document.getElementById("contenido").innerHTML = `
+      <h2 class="panel-title">✅ Listo</h2>
+      <div class="aviso">
+        Se borraron los datos del semestre (grupos, matrículas, notas, actas, evaluaciones e historial).
+        Las cuentas de estudiantes, docentes, directivos y el pensum se conservaron intactos.
+      </div>
+      <button onclick="renderHomeDashboard()">Volver al inicio</button>
+    `;
+  }, 1500);
 }
 
 function renderListaCuentasAdmin(){
