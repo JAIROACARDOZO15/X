@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UAN Sistema Académico</title>
+<link rel="stylesheet" href="estilos.css">
+</head>
+
+<body>
+
+<!-- ================= INICIO ================= -->
+<div id="inicio">
+  <div class="logo-box">
+    <div class="logo-uan">UAN</div>
+  </div>
+  <h1 class="titulo">UNIVERSIDAD AUTÓNOMA NACIONAL</h1>
+  <p class="subtitulo">Plataforma Académica Integra UAN</p>
+
+  <div class="cards">
+    <div class="card admin" onclick="mostrarLogin('admin')">
+      <span class="icon">🛠️</span>
+      <div class="titulo-card">ADMINISTRATIVOS</div>
+      <div class="desc">Admisiones, Dirección de Escuela y Coordinación</div>
+    </div>
+    <div class="card doc" onclick="mostrarLogin('doc')">
+      <span class="icon">📋</span>
+      <div class="titulo-card">DOCENTES</div>
+      <div class="desc">Acceso para docentes y profesores</div>
+    </div>
+    <div class="card est" onclick="mostrarLogin('est')">
+      <span class="icon">🎓</span>
+      <div class="titulo-card">ESTUDIANTES</div>
+      <div class="desc">Acceso para estudiantes</div>
+    </div>
+  </div>
+
+  <div class="footer-nota">
+    🔒 Este sistema protege los datos personales de acuerdo con la normativa de protección de datos vigente.
+  </div>
+</div>
+
+<!-- ================= LOGIN ================= -->
+<div id="login">
+  <div class="login-box">
+    <h2>Iniciar sesión</h2>
+    <input id="user" placeholder="Usuario / Código">
+    <input id="pass" type="password" placeholder="Contraseña">
+    <div id="loginError" style="color:#a83232;font-size:13px;min-height:16px"></div>
+    <button onclick="login()">Entrar</button>
+    <button class="volver" onclick="volverInicio()">← Volver</button>
+  </div>
+</div>
+
+<!-- ================= DASHBOARD ================= -->
+<div id="dashboard">
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:12px">
+      <span class="topbar-icon" onclick="toggleSidebarMobile()" title="Menú">☰</span>
+      <div class="logo-mini">UAN</div>
+      <div class="brand">Plataforma Académica Integra UAN</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px">
+      <span class="topbar-icon" title="Mensajes">✉️</span>
+      <span class="topbar-icon" title="Notificaciones">🔔</span>
+      <span id="topbarUsuario" style="font-size:14px">👤</span>
+    </div>
+  </div>
+  <div class="topbar-buscar">🔍 <input placeholder="Buscar en el menú... (próximamente)" disabled></div>
+
+  <div class="sidebar">
+    <div class="userbox">
+      <img id="fotoPerfil" src="https://via.placeholder.com/90/1e5631/ffffff?text=UAN" alt="foto">
+      <div class="rol" id="rolTexto">Rol: —</div>
+      <div class="codigo" id="codigoTexto"></div>
+      <div class="nombre" id="nombreTexto"></div>
+      <button class="cambiar-foto" id="btnCambiarFoto" onclick="cambiarFoto()" style="display:none">Cambiar foto personal</button>
+    </div>
+
+    <h3 style="font-size:14px;border-bottom:1px solid #33475a;padding-bottom:6px">Opciones</h3>
+
+    <div id="menuDinamico"></div>
+
+    <button class="logout-btn btn-peligro" onclick="logout()">Salir</button>
+  </div>
+
+  <div class="content" id="contenido">
+    <h2 class="panel-title">Bienvenido</h2>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>
