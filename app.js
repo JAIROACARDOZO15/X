@@ -778,6 +778,14 @@ let nivelCount = 0; // usado en formularios de pensum
 let vistaEstudianteActual = 'datos';
 let vistaDocenteActual = 'horario';
 
+/* Solo estas vistas se refrescan solas en segundo plano: son de solo lectura
+   (horario, matrícula, notas de consulta, avance). Las que tienen formularios
+   activos (cambiar contraseña, evaluación docente, datos personales editables,
+   notas del docente mientras califica) quedan afuera a propósito, para no
+   borrarle a nadie lo que está escribiendo a mitad de camino. */
+const VISTAS_ESTUDIANTE_AUTOREFRESH = ['horario','matricularMaterias','matricula','avance'];
+const VISTAS_DOCENTE_AUTOREFRESH = ['horario','evaluacion'];
+
 function actualizarFechaHora(){
   const el=document.getElementById("fechaHora");
   if(el) el.textContent=new Date().toLocaleString();
@@ -916,19 +924,50 @@ function irDocente(vista){
 }
 
 /* ======================================================================
-   ACTUALIZACIÓN EN VIVO ENTRE PESTAÑAS
+   ACTUALIZACIÓN EN VIVO ENTRE PESTAÑAS (mismo navegador)
    Cuando Admisiones/Director/Coordinador guardan un cambio en otra pestaña
-   del mismo navegador, esta pestaña (si es un Estudiante o un Docente
-   con sesión abierta) refresca automáticamente lo que está viendo.
+   del mismo navegador, esta pestaña (si es un Estudiante o un Docente con
+   sesión abierta) refresca automáticamente lo que está viendo — pero solo
+   si está en una de las vistas "seguras" (sin formulario a medio llenar).
    ====================================================================== */
 window.addEventListener('storage', function(){
   if(!usuarioActual) return;
-  if(usuarioActual.rol === 'estudiante'){
+  if(usuarioActual.rol === 'estudiante' && VISTAS_ESTUDIANTE_AUTOREFRESH.includes(vistaEstudianteActual)){
     mostrarPanel(vistaEstudianteActual);
-  } else if(usuarioActual.rol === 'docente'){
+  } else if(usuarioActual.rol === 'docente' && VISTAS_DOCENTE_AUTOREFRESH.includes(vistaDocenteActual)){
     irDocente(vistaDocenteActual);
   }
 });
+
+/* ======================================================================
+   ACTUALIZACIÓN EN VIVO ENTRE DISPOSITIVOS (celular, otro computador...)
+   El evento "storage" de arriba SOLO funciona entre pestañas del MISMO
+   navegador — no sirve para que el celular de un estudiante se entere de
+   que el Coordinador acaba de generar horarios desde el computador de la
+   universidad. Para eso, cada cierto tiempo se vuelve a descargar todo de
+   Supabase (silenciosamente) y, si la pantalla actual es una vista
+   "segura" de solo lectura, se refresca sola.
+   ====================================================================== */
+async function sincronizarTodoSilencioso(){
+  await Promise.all([
+    sincronizarUsuariosDesdeSupabase(),
+    sincronizarProgramasDesdeSupabase(),
+    sincronizarGruposDesdeSupabase(),
+    sincronizarMatriculasNotasDesdeSupabase(),
+    sincronizarActasEvaluacionHistorialDesdeSupabase()
+  ]);
+}
+setInterval(async ()=>{
+  if(!usuarioActual || !datosListos) return;
+  await sincronizarTodoSilencioso();
+  if(usuarioActual.rol === 'estudiante' && VISTAS_ESTUDIANTE_AUTOREFRESH.includes(vistaEstudianteActual)){
+    mostrarPanel(vistaEstudianteActual);
+  } else if(usuarioActual.rol === 'docente' && VISTAS_DOCENTE_AUTOREFRESH.includes(vistaDocenteActual)){
+    irDocente(vistaDocenteActual);
+  }
+  // Admisiones/Director/Coordinador no se refrescan solos (suelen tener
+  // formularios abiertos), pero sus datos en segundo plano sí quedan al día.
+}, 15000);
 
 document.addEventListener('DOMContentLoaded', function(){
   const barra = document.querySelector(".sidebar");
