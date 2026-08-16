@@ -3526,13 +3526,22 @@ function mostrarNotaMateria(indice){
   if(items.length===0){
     tablaItems = `<p style="font-size:13px;color:#666">El docente aún no ha configurado ítems de evaluación para esta materia.</p>`;
   } else {
-    let filasItems = items.map(it=>`
+    let filasItems = items.map(it=>{
+      let valorMostrado;
+      if(it.tipo==="asistencia"){
+        const v = calcularNotaAsistencia(grupoId, e.codigo);
+        valorMostrado = v===null ? "Sin registrar" : `${v.toFixed(1)} <span style="font-size:11px;color:#999">(auto)</span>`;
+      } else {
+        valorMostrado = (notasEstudiante[it.id]!==undefined && notasEstudiante[it.id]!=="") ? notasEstudiante[it.id] : "Sin registrar";
+      }
+      return `
       <tr>
         <td style="text-align:left">${it.nombre}</td>
         <td>${it.peso}%</td>
-        <td>${notasEstudiante[it.id]!==undefined && notasEstudiante[it.id]!=="" ? notasEstudiante[it.id] : "Sin registrar"}</td>
+        <td>${valorMostrado}</td>
       </tr>
-    `).join("");
+    `;
+    }).join("");
 
     tablaItems = `
       <table style="max-width:500px">
