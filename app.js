@@ -370,6 +370,98 @@ function saveNotas(obj){
 }
 
 /* ----------------------------------------------------------------------
+   MÓDULO 6: ASISTENCIA — { grupoId: { fecha: { codigo: 'presente'|'tardanza'|'falla' } } }
+   Igual que notas, se marca clase por clase (un docente pasando lista),
+   así que usa upsert puntual por fila en vez de reemplazar toda la tabla.
+   ---------------------------------------------------------------------- */
+async function sincronizarAsistenciaDesdeSupabase(){
+  if(!supabaseClient) return;
+  try{
+    const { data, error } = await supabaseClient.from("asistencia").select("grupo_id,fecha,codigo,estado");
+    if(error){ console.error("Error leyendo asistencia de Supabase:", error); return; }
+    const obj = {};
+    (data||[]).forEach(row=>{
+      if(!obj[row.grupo_id]) obj[row.grupo_id] = {};
+      if(!obj[row.grupo_id][row.fecha]) obj[row.grupo_id][row.fecha] = {};
+      obj[row.grupo_id][row.fecha][row.codigo] = row.estado;
+    });
+    localStorage.setItem("uan_asistencia", JSON.stringify(obj));
+  }catch(err){
+    console.error("No se pudo conectar con Supabase (asistencia), se sigue usando la copia local:", err);
+  }
+}
+/* Reemplazo completo — solo se usa en operaciones masivas (ej. Zona de Peligro). */
+async function empujarAsistenciaASupabase(obj){
+  if(!supabaseClient) return;
+  try{
+    await supabaseClient.from("asistencia").delete().neq("id","___ninguno___");
+    const filas = [];
+    Object.keys(obj).forEach(grupoId=>{
+      Object.keys(obj[grupoId]||{}).forEach(fecha=>{
+        Object.keys(obj[grupoId][fecha]||{}).forEach(codigo=>{
+          filas.push({id:grupoId+"__"+fecha+"__"+codigo, grupo_id:grupoId, fecha, codigo, estado:obj[grupoId][fecha][codigo]});
+        });
+      });
+    });
+    if(filas.length){
+      const { error } = await supabaseClient.from("asistencia").insert(filas);
+      if(error) console.error("No se pudo guardar asistencia en Supabase:", error);
+    }
+  }catch(err){ console.error("No se pudo guardar asistencia en Supabase:", err); }
+}
+/* Upsert (o borrado) puntual de UNA sola marca de asistencia — lo que usa
+   marcarAsistencia en cada casilla, para no reemplazar toda la tabla. */
+async function empujarFilaAsistenciaASupabase(grupoId, fecha, codigo, estado){
+  if(!supabaseClient) return;
+  try{
+    const id = grupoId+"__"+fecha+"__"+codigo;
+    if(!estado){
+      const { error } = await supabaseClient.from("asistencia").delete().eq("id", id);
+      if(error) console.error("No se pudo borrar la marca de asistencia en Supabase:", error);
+      return;
+    }
+    const { error } = await supabaseClient.from("asistencia").upsert(
+      { id, grupo_id:grupoId, fecha, codigo, estado }, { onConflict: "id" }
+    );
+    if(error) console.error("No se pudo guardar la asistencia en Supabase:", error);
+  }catch(err){ console.error("No se pudo guardar la asistencia en Supabase:", err); }
+}
+
+function getAsistencia(){ return JSON.parse(localStorage.getItem("uan_asistencia") || "{}"); }
+function saveAsistencia(obj){
+  localStorage.setItem("uan_asistencia", JSON.stringify(obj));
+  empujarAsistenciaASupabase(obj);
+}
+function marcarAsistencia(grupoId, fecha, codigo, estado){
+  const asistencia = getAsistencia();
+  if(!asistencia[grupoId]) asistencia[grupoId] = {};
+  if(!asistencia[grupoId][fecha]) asistencia[grupoId][fecha] = {};
+  if(estado){
+    asistencia[grupoId][fecha][codigo] = estado;
+  } else {
+    delete asistencia[grupoId][fecha][codigo];
+  }
+  localStorage.setItem("uan_asistencia", JSON.stringify(asistencia));
+  empujarFilaAsistenciaASupabase(grupoId, fecha, codigo, estado || null);
+}
+/* Nota de asistencia en escala 0-5: presente=1 punto, tardanza=0.5, falla=0,
+   sobre el total de clases en las que el docente pasó lista para ese
+   estudiante. Si nunca se ha pasado lista, devuelve null (no se puede calcular). */
+function calcularNotaAsistencia(grupoId, codigo){
+  const fechas = getAsistencia()[grupoId] || {};
+  let puntos = 0, total = 0;
+  Object.keys(fechas).forEach(fecha=>{
+    const estado = fechas[fecha][codigo];
+    if(estado===undefined) return;
+    total++;
+    if(estado==="presente") puntos += 1;
+    else if(estado==="tardanza") puntos += 0.5;
+  });
+  if(total===0) return null;
+  return puntos/total*5;
+}
+
+/* ----------------------------------------------------------------------
    MÓDULO 5 (final): ACTAS, EVALUACIÓN DOCENTE E HISTORIAL ACADÉMICO
    Todas de baja/media frecuencia (se guardan pocas veces por semestre,
    no en cada tecla como notas), así que usan el mismo patrón de
@@ -697,7 +789,8 @@ Promise.all([
   sincronizarProgramasDesdeSupabase(),
   sincronizarGruposDesdeSupabase(),
   sincronizarMatriculasNotasDesdeSupabase(),
-  sincronizarActasEvaluacionHistorialDesdeSupabase()
+  sincronizarActasEvaluacionHistorialDesdeSupabase(),
+  sincronizarAsistenciaDesdeSupabase()
 ]).finally(()=>{ datosListos = true; inicializarDatos(); });
 
 /* Versiones anteriores guardaban las electivas como {nombreMateria: creditos}.
@@ -783,7 +876,7 @@ let vistaDocenteActual = 'horario';
    activos (cambiar contraseña, evaluación docente, datos personales editables,
    notas del docente mientras califica) quedan afuera a propósito, para no
    borrarle a nadie lo que está escribiendo a mitad de camino. */
-const VISTAS_ESTUDIANTE_AUTOREFRESH = ['horario','matricularMaterias','matricula','avance'];
+const VISTAS_ESTUDIANTE_AUTOREFRESH = ['horario','matricularMaterias','matricula','avance','asistencia'];
 const VISTAS_DOCENTE_AUTOREFRESH = ['horario','evaluacion'];
 
 function actualizarFechaHora(){
@@ -919,6 +1012,7 @@ function irDocente(vista){
   vistaDocenteActual = vista;
   if(vista==='horario') renderHorarioDocente();
   else if(vista==='notas') renderNotasDocente();
+  else if(vista==='asistencia') renderAsistenciaDocente();
   else if(vista==='evaluacion') renderEvaluacionRecibidaDocente();
   else if(vista==='password') renderCambiarPasswordDocente();
 }
@@ -954,7 +1048,8 @@ async function sincronizarTodoSilencioso(){
     sincronizarProgramasDesdeSupabase(),
     sincronizarGruposDesdeSupabase(),
     sincronizarMatriculasNotasDesdeSupabase(),
-    sincronizarActasEvaluacionHistorialDesdeSupabase()
+    sincronizarActasEvaluacionHistorialDesdeSupabase(),
+    sincronizarAsistenciaDesdeSupabase()
   ]);
 }
 setInterval(async ()=>{
@@ -1011,6 +1106,7 @@ function renderSidebar(){
         <div onclick="mostrarPanel('evaluacion')">Evaluación Docente</div>
         <div onclick="mostrarPanel('promedio')">Calcular Promedio Final Periodo</div>
         <div onclick="mostrarPanel('matricula')">Consulta de Matrícula y Notas</div>
+        <div onclick="mostrarPanel('asistencia')">Mi Asistencia</div>
         <div onclick="mostrarPanel('seguimiento')">Seguimiento Académico Docente</div>
       </div>
       <div class="menu-item" onclick="mostrarPanel('grado')">Trabajo de grado <span>›</span></div>
@@ -1076,6 +1172,7 @@ function renderSidebar(){
       <div class="menu-item" onclick="renderHomeDashboard()">🏠 Inicio <span>›</span></div>
       <div class="menu-item" onclick="irDocente('horario')">Horario Actual <span>›</span></div>
       <div class="menu-item" onclick="irDocente('notas')">Notas <span>›</span></div>
+      <div class="menu-item" onclick="irDocente('asistencia')">Asistencia <span>›</span></div>
       <div class="menu-item" onclick="irDocente('evaluacion')">Evaluación Docente Recibida <span>›</span></div>
       <div class="menu-item" onclick="irDocente('password')">Cambiar Contraseña <span>›</span></div>
     `;
@@ -1099,12 +1196,14 @@ function renderHomeDashboard(){
       {icono:"📊", label:"Matrícula y Notas", accion:"mostrarPanel('matricula')"},
       {icono:"📈", label:"Calcular Promedio", accion:"mostrarPanel('promedio')"},
       {icono:"👍", label:"Evaluación Docente", accion:"mostrarPanel('evaluacion')"},
+      {icono:"✅", label:"Mi Asistencia", accion:"mostrarPanel('asistencia')"},
       {icono:"🎓", label:"Trabajo de Grado", accion:"mostrarPanel('grado')"}
     ];
   } else if(usuarioActual.rol==="docente"){
     tiles = [
       {icono:"🗓️", label:"Horario Actual", accion:"irDocente('horario')"},
       {icono:"📊", label:"Notas", accion:"irDocente('notas')"},
+      {icono:"✅", label:"Asistencia", accion:"irDocente('asistencia')"},
       {icono:"⭐", label:"Evaluación Docente Recibida", accion:"irDocente('evaluacion')"},
       {icono:"🔑", label:"Cambiar Contraseña", accion:"irDocente('password')"}
     ];
@@ -1237,6 +1336,7 @@ function renderZonaPeligro(){
         <li>Evaluaciones docentes recibidas</li>
         <li>Bloqueos por evaluación docente pendiente</li>
         <li>Historial académico, nivel y normalidad de cada estudiante</li>
+        <li>Registros de asistencia</li>
       </ul>
       <b>NO se borran:</b> las cuentas de estudiantes, docentes, directores/coordinadores,
       ni el pensum / plan de estudios de los programas.
@@ -1285,6 +1385,7 @@ function borronYCuentaNueva(){
   saveHistorial({});
   saveNivelesEstudiantes({});
   saveNormalidadEstudiantes({});
+  saveAsistencia({});
 
   localStorage.setItem("uan_next_grupo_id","1");
   localStorage.setItem("uan_next_item_id","1");
@@ -2186,11 +2287,23 @@ function contarUsoGlobalPatron(patron){
    grupo sin horario. */
 function autogenerarBloques(docente, salon){
   const ocupados = bloquesOcupadosDocente(docente);
+  const diasYaUsadosPorDocente = new Set(ocupados.map(o=>o.dia));
   let candidatos = PATRONES_HORARIO.filter(p=>!patronChocaConOcupados(p, ocupados));
   let patron;
 
   if(candidatos.length>0){
-    candidatos.sort((a,b)=> contarUsoGlobalPatron(a) - contarUsoGlobalPatron(b));
+    candidatos.sort((a,b)=>{
+      // 1) Prioridad principal: que el patrón meta al docente en días donde
+      //    TODAVÍA no dicta nada esta semana. Así, si un mismo docente da
+      //    varias materias, sus clases se reparten Lunes/Martes/Miércoles...
+      //    en vez de amontonarse siempre en el mismo par de días a distinta hora.
+      const nuevosDiasA = a.dias.filter(d=>!diasYaUsadosPorDocente.has(d)).length;
+      const nuevosDiasB = b.dias.filter(d=>!diasYaUsadosPorDocente.has(d)).length;
+      if(nuevosDiasB !== nuevosDiasA) return nuevosDiasB - nuevosDiasA;
+      // 2) Entre empatados, la franja menos usada en todo el sistema (para
+      //    repartir también entre distintos docentes/materias).
+      return contarUsoGlobalPatron(a) - contarUsoGlobalPatron(b);
+    });
     patron = candidatos[0];
   } else {
     let mejor=null, menosChoques=Infinity;
@@ -2716,7 +2829,10 @@ function renderVerGrupos(){
       filas += `<tr>
         <td>${materia}${g.componente ? " ("+(g.componente==='Teorico'?'Teórico':'Práctico')+")" : ""}</td><td>${g.grupo}</td><td>${g.docente}</td>
         <td style="text-align:left">${resumenBloques(g.bloques)}</td><td>${g.capacidad||"-"}</td>
-        <td class="acciones"><button class="btn-peligro" onclick="eliminarGrupo('${materia}','${g.id}')">Eliminar</button></td>
+        <td class="acciones">
+          <button class="btn-secundario" onclick="renderEditarHorarioGrupo('${materia}','${g.id}')">Editar Horario</button>
+          <button class="btn-peligro" onclick="eliminarGrupo('${materia}','${g.id}')">Eliminar</button>
+        </td>
       </tr>`;
     });
   });
@@ -2731,6 +2847,107 @@ function renderVerGrupos(){
     </table>
     <button class="add-btn" onclick="renderProgramarMateria()">+ Programar Materia</button>
   `;
+}
+
+/* ----------------------------------------------------------------------
+   Editar día/hora/salón de un grupo ya programado. Valida que el nuevo
+   horario no choque con otras clases del MISMO docente antes de guardar.
+   ---------------------------------------------------------------------- */
+let bloquesEdicionTemp = [];
+const HORAS_EDICION_HORARIO = ["06:00","07:00","08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00","22:00"];
+const DIAS_EDICION_HORARIO = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+
+function leerBloquesFormularioEdicion(){
+  const filas = document.querySelectorAll("#tablaBloquesEdicion tr[data-fila]");
+  const resultado = [];
+  filas.forEach(fila=>{
+    const i = fila.dataset.fila;
+    resultado.push({
+      dia: document.getElementById("ebd_"+i).value,
+      horaInicio: document.getElementById("ebhi_"+i).value,
+      horaFin: document.getElementById("ebhf_"+i).value,
+      salon: document.getElementById("ebs_"+i).value.trim()
+    });
+  });
+  return resultado;
+}
+
+function renderEditarHorarioGrupo(materia, grupoId){
+  const programaNombre = usuarioActual.programa;
+  const g = (getGrupos()[programaNombre][materia]||[]).find(x=>x.id===grupoId);
+  if(!g){ renderVerGrupos(); return; }
+  bloquesEdicionTemp = (g.bloques||[]).map(b=>({...b}));
+  pintarFormularioEdicionHorario(materia, grupoId, g);
+}
+
+function pintarFormularioEdicionHorario(materia, grupoId, g, aviso){
+  const filas = bloquesEdicionTemp.map((b,i)=>`
+    <tr data-fila="${i}">
+      <td><select id="ebd_${i}">${DIAS_EDICION_HORARIO.map(d=>`<option value="${d}" ${d===b.dia?'selected':''}>${d}</option>`).join("")}</select></td>
+      <td><select id="ebhi_${i}">${HORAS_EDICION_HORARIO.map(h=>`<option value="${h}" ${h===b.horaInicio?'selected':''}>${h}</option>`).join("")}</select></td>
+      <td><select id="ebhf_${i}">${HORAS_EDICION_HORARIO.map(h=>`<option value="${h}" ${h===b.horaFin?'selected':''}>${h}</option>`).join("")}</select></td>
+      <td><input id="ebs_${i}" value="${b.salon||''}" placeholder="Ej: Aula 108"></td>
+      <td><button class="btn-peligro" onclick="quitarBloqueEdicion('${materia}','${grupoId}',${i})">Quitar</button></td>
+    </tr>
+  `).join("");
+
+  document.getElementById("contenido").innerHTML = `
+    <h2 class="panel-title">Editar Horario — ${materia}${g.componente ? " ("+(g.componente==='Teorico'?'Teórico':'Práctico')+")" : ""} — Grupo ${g.grupo}</h2>
+    <p style="font-size:13px;color:#666">Docente: <b>${g.docente}</b>. El sistema valida que el nuevo horario no choque con otra clase de este mismo docente antes de guardar.</p>
+    ${aviso ? `<div class="aviso aviso-error" style="max-width:600px">${aviso}</div>` : ""}
+    <table id="tablaBloquesEdicion" style="max-width:700px">
+      <tr><th>Día</th><th>Hora inicio</th><th>Hora fin</th><th>Salón</th><th></th></tr>
+      ${filas || '<tr><td colspan="5">Sin bloques. Agrega uno.</td></tr>'}
+    </table>
+    <button class="btn-secundario" onclick="agregarBloqueEdicion('${materia}','${grupoId}')">+ Agregar bloque</button>
+    <br><br>
+    <button onclick="guardarEdicionHorarioGrupo('${materia}','${grupoId}')">Guardar cambios</button>
+    <button class="btn-secundario" onclick="renderVerGrupos()">Cancelar</button>
+  `;
+}
+
+function agregarBloqueEdicion(materia, grupoId){
+  bloquesEdicionTemp = leerBloquesFormularioEdicion();
+  bloquesEdicionTemp.push({dia:"Lunes", horaInicio:"06:00", horaFin:"08:00", salon:""});
+  const g = (getGrupos()[usuarioActual.programa][materia]||[]).find(x=>x.id===grupoId);
+  pintarFormularioEdicionHorario(materia, grupoId, g);
+}
+
+function quitarBloqueEdicion(materia, grupoId, i){
+  bloquesEdicionTemp = leerBloquesFormularioEdicion();
+  bloquesEdicionTemp.splice(i,1);
+  const g = (getGrupos()[usuarioActual.programa][materia]||[]).find(x=>x.id===grupoId);
+  pintarFormularioEdicionHorario(materia, grupoId, g);
+}
+
+function guardarEdicionHorarioGrupo(materia, grupoId){
+  const nuevosBloques = leerBloquesFormularioEdicion();
+  const programaNombre = usuarioActual.programa;
+  const grupos = getGrupos();
+  const g = (grupos[programaNombre][materia]||[]).find(x=>x.id===grupoId);
+  if(!g) return;
+
+  for(const b of nuevosBloques){
+    if(minutosDesde(b.horaInicio) >= minutosDesde(b.horaFin)){
+      pintarFormularioEdicionHorario(materia, grupoId, g, "La hora de inicio debe ser menor que la hora de fin en todos los bloques.");
+      return;
+    }
+  }
+
+  // No choca con otras clases del MISMO docente (sin contar los bloques
+  // que ya tenía este mismo grupo antes de la edición).
+  const ocupadosOtros = bloquesOcupadosDocente(g.docente).filter(o=>
+    !(g.bloques||[]).some(propio => propio.dia===o.dia && propio.horaInicio===o.horaInicio && propio.horaFin===o.horaFin && propio.salon===o.salon)
+  );
+  const choque = nuevosBloques.some(nb => ocupadosOtros.some(o=>bloquesSeSolapan(nb,o)));
+  if(choque){
+    pintarFormularioEdicionHorario(materia, grupoId, g, `⚠️ Ese horario le choca con otra clase que ya dicta ${g.docente}. Elige otro día u hora.`);
+    return;
+  }
+
+  g.bloques = nuevosBloques;
+  saveGrupos(grupos);
+  renderVerGrupos();
 }
 
 function eliminarGrupo(materia, id){
@@ -3026,6 +3243,7 @@ function mostrarPanel(tipo){
   if(tipo==="promedio"){ renderPromedioEstudiante(); return; }
   if(tipo==="matricula"){ renderConsultaMatriculaNotas(); return; }
   if(tipo==="evaluacion"){ renderEvaluacionDocente(); return; }
+  if(tipo==="asistencia"){ renderAsistenciaEstudiante(); return; }
 
   const paneles={
     seguimiento:`<h2 class="panel-title">Seguimiento Académico Docente</h2><p>Aquí se mostrará el seguimiento académico realizado por los docentes.</p>`,
@@ -4125,7 +4343,13 @@ function calcularDefinitivaGrupo(grupoId, codigo){
 
   let sumaPeso=0, sumaPonderada=0;
   items.forEach(item=>{
-    const valor = parseFloat(notasEstudiante[item.id]);
+    let valor;
+    if(item.tipo==="asistencia"){
+      const v = calcularNotaAsistencia(grupoId, codigo);
+      valor = (v===null) ? NaN : v;
+    } else {
+      valor = parseFloat(notasEstudiante[item.id]);
+    }
     const peso = parseFloat(item.peso) || 0;
     if(!isNaN(valor)){
       sumaPonderada += valor*peso;
@@ -4140,13 +4364,19 @@ function calcularDefinitivaGrupo(grupoId, codigo){
 function agregarItemEvaluacion(grupoId){
   const nombre = document.getElementById("item_nombre_"+grupoId).value.trim();
   const peso = parseFloat(document.getElementById("item_peso_"+grupoId).value);
+  const checkAsistencia = document.getElementById("item_asistencia_"+grupoId);
+  const esAsistencia = !!(checkAsistencia && checkAsistencia.checked);
   if(!nombre || !peso || peso<=0){
     document.getElementById("avisoItems_"+grupoId).innerHTML = `<div class="aviso aviso-error">Escribe un nombre y un porcentaje válido (mayor a 0).</div>`;
     return;
   }
   const config = getConfigEvaluacion();
   if(!config[grupoId]) config[grupoId] = [];
-  config[grupoId].push({ id: siguienteIdItemEvaluacion(), nombre, peso });
+  if(esAsistencia && config[grupoId].some(it=>it.tipo==="asistencia")){
+    document.getElementById("avisoItems_"+grupoId).innerHTML = `<div class="aviso aviso-error">Ya existe un ítem de asistencia en este grupo.</div>`;
+    return;
+  }
+  config[grupoId].push({ id: siguienteIdItemEvaluacion(), nombre, peso, tipo: esAsistencia ? "asistencia" : "manual" });
   saveConfigEvaluacion(config);
   renderNotasDocente();
 }
@@ -4297,6 +4527,10 @@ function renderNotasDocente(){
         } else {
           filas = estudiantes.map(e=>{
             const celdasItems = items.map(it=>{
+              if(it.tipo==="asistencia"){
+                const v = calcularNotaAsistencia(g.id, e.codigo);
+                return `<td style="background:#f0f0f0"><b>${v===null?"-":v.toFixed(1)}</b><br><span style="font-size:10px;color:#999">auto</span></td>`;
+              }
               const notaItem = ((notas[g.id]||{})[e.codigo]||{})[it.id];
               return `<td><input type="number" min="0" max="5" step="0.1"
                     id="nota_${g.id}_${e.codigo}_${it.id}"
@@ -4336,6 +4570,9 @@ function renderNotasDocente(){
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
               <input id="item_nombre_${g.id}" placeholder="Ej: Taller 1" style="width:180px">
               <input id="item_peso_${g.id}" type="number" min="1" max="100" placeholder="% (ej: 5)" style="width:110px">
+              <label style="font-size:12px;display:flex;align-items:center;gap:4px">
+                <input type="checkbox" id="item_asistencia_${g.id}"> Es el ítem de Asistencia (se calcula solo)
+              </label>
               <button class="btn-secundario" style="width:auto;padding:8px 14px" onclick="agregarItemEvaluacion('${g.id}')">+ Agregar ítem</button>
             </div>`}
 
@@ -4356,6 +4593,163 @@ function renderNotasDocente(){
   document.getElementById("contenido").innerHTML=`
     <h2 class="panel-title">Notas y Actas — ${usuarioActual.nombre}</h2>
     ${secciones || `<p style="color:#999">No tienes grupos con estudiantes matriculados este periodo.</p>`}
+  `;
+}
+
+/* ======================================================================
+   ASISTENCIA — DOCENTE (pasar lista) y ESTUDIANTE (consultar la suya)
+   ====================================================================== */
+function gruposConEstudiantesDelDocente(){
+  const programas = programasDelDocente();
+  const todosLosGrupos = getGrupos();
+  let lista = [];
+  programas.forEach(programaNombre=>{
+    const grupos = todosLosGrupos[programaNombre] || {};
+    Object.keys(grupos).forEach(materia=>{
+      grupos[materia].forEach(g=>{
+        if(g.docente !== usuarioActual.nombre) return;
+        const estudiantes = estudiantesDeGrupo(programaNombre, materia, g.id);
+        if(estudiantes.length===0) return;
+        lista.push({programaNombre, materia, g, estudiantes});
+      });
+    });
+  });
+  return lista;
+}
+
+function renderAsistenciaDocente(grupoSeleccionado, fechaSeleccionada){
+  const opcionesGrupos = gruposConEstudiantesDelDocente();
+
+  if(opcionesGrupos.length===0){
+    document.getElementById("contenido").innerHTML = `
+      <h2 class="panel-title">Asistencia</h2>
+      <p style="color:#999">No tienes grupos con estudiantes matriculados este periodo.</p>
+    `;
+    return;
+  }
+
+  const activo = opcionesGrupos.find(o=>o.g.id===grupoSeleccionado) || opcionesGrupos[0];
+  const fecha = fechaSeleccionada || new Date().toISOString().slice(0,10);
+
+  const asistencia = getAsistencia();
+  const registrosFecha = (asistencia[activo.g.id] || {})[fecha] || {};
+
+  const opcionesSelectGrupo = opcionesGrupos.map(o=>{
+    const etiquetaComponente = o.g.componente ? " ("+(o.g.componente==='Teorico'?'Teórico':'Práctico')+")" : "";
+    return `<option value="${o.g.id}" ${o.g.id===activo.g.id?'selected':''}>${o.materia}${etiquetaComponente} — ${o.g.grupo}</option>`;
+  }).join("");
+
+  const filas = activo.estudiantes.map(e=>{
+    const estadoActual = registrosFecha[e.codigo] || "";
+    return `<tr>
+      <td>${e.codigo}</td>
+      <td style="text-align:left">${e.nombre}</td>
+      <td>
+        <select onchange="marcarAsistenciaYRefrescar('${activo.g.id}','${fecha}','${e.codigo}', this.value)">
+          <option value="" ${estadoActual===""?"selected":""}>— Sin marcar —</option>
+          <option value="presente" ${estadoActual==="presente"?"selected":""}>✅ Presente</option>
+          <option value="tardanza" ${estadoActual==="tardanza"?"selected":""}>🕒 Tardanza</option>
+          <option value="falla" ${estadoActual==="falla"?"selected":""}>❌ Falla</option>
+        </select>
+      </td>
+    </tr>`;
+  }).join("");
+
+  const fechasRegistradas = Object.keys(asistencia[activo.g.id] || {}).sort().reverse();
+
+  document.getElementById("contenido").innerHTML = `
+    <h2 class="panel-title">Asistencia</h2>
+    <p style="font-size:13px;color:#666;max-width:560px">
+      Para que la asistencia cuente en la nota final de una materia, primero crea un ítem de evaluación
+      marcado como "Es el ítem de Asistencia" en <b>Notas</b> — ahí defines qué porcentaje vale (ej: 5%).
+    </p>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:end;margin-bottom:14px">
+      <div>
+        <label style="font-size:12px;display:block">Grupo</label>
+        <select id="selGrupoAsistencia" onchange="renderAsistenciaDocente(this.value, document.getElementById('selFechaAsistencia').value)">${opcionesSelectGrupo}</select>
+      </div>
+      <div>
+        <label style="font-size:12px;display:block">Fecha de la clase</label>
+        <input type="date" id="selFechaAsistencia" value="${fecha}" onchange="renderAsistenciaDocente(document.getElementById('selGrupoAsistencia').value, this.value)">
+      </div>
+    </div>
+    <table style="max-width:600px">
+      <tr><th>Código</th><th>Nombre</th><th>Estado</th></tr>
+      ${filas}
+    </table>
+    ${fechasRegistradas.length ? `
+      <p style="font-size:12px;color:#666;margin-top:14px">Clases ya registradas para este grupo (click para revisar/editar):<br>
+        ${fechasRegistradas.map(f=>`<span class="badge" style="background:#607d8b;cursor:pointer;margin:2px" onclick="renderAsistenciaDocente('${activo.g.id}','${f}')">${f}</span>`).join(" ")}
+      </p>` : ""}
+  `;
+}
+
+function marcarAsistenciaYRefrescar(grupoId, fecha, codigo, estado){
+  marcarAsistencia(grupoId, fecha, codigo, estado);
+}
+
+function renderAsistenciaEstudiante(){
+  const e = getEstudiantes()[usuarioActual.codigo];
+  const registro = getMatriculas()[e.codigo];
+  const gruposPrograma = getGrupos()[e.programa] || {};
+  const asistencia = getAsistencia();
+  const configTodo = getConfigEvaluacion();
+
+  if(!registro || !registro.materias || Object.keys(registro.materias).length===0){
+    document.getElementById("contenido").innerHTML = `
+      <h2 class="panel-title">Mi Asistencia</h2>
+      <p style="color:#999">No tienes materias matriculadas este periodo.</p>
+    `;
+    return;
+  }
+
+  let secciones = "";
+  Object.keys(registro.materias).forEach(materia=>{
+    const asign = registro.materias[materia];
+    const listaGrupos = gruposPrograma[materia] || [];
+    const entradas = (asign && typeof asign==="object")
+      ? [["Teórico", asign.Teorico], ["Práctico", asign.Practico]].filter(([,id])=>id)
+      : [[null, asign]];
+
+    entradas.forEach(([etiquetaComponente, grupoId])=>{
+      const g = listaGrupos.find(x=>x.id===grupoId);
+      if(!g) return;
+
+      const fechasGrupo = asistencia[grupoId] || {};
+      const fechasOrdenadas = Object.keys(fechasGrupo).sort();
+      const filasFechas = fechasOrdenadas.map(fecha=>{
+        const estado = fechasGrupo[fecha][e.codigo];
+        if(estado===undefined) return "";
+        const etiqueta = estado==="presente" ? "✅ Presente" : estado==="tardanza" ? "🕒 Tardanza" : "❌ Falla";
+        return `<tr><td>${fecha}</td><td>${etiqueta}</td></tr>`;
+      }).join("");
+
+      const notaAsistencia = calcularNotaAsistencia(grupoId, e.codigo);
+      const itemAsistencia = (configTodo[grupoId]||[]).find(it=>it.tipo==="asistencia");
+
+      secciones += `
+        <div style="border:1px solid #ddd;border-radius:8px;padding:14px;margin-bottom:16px;background:#fafafa">
+          <h3 style="margin-top:0">${materia}${etiquetaComponente ? " ("+etiquetaComponente+")" : ""} — Grupo ${g.grupo}</h3>
+          <p style="font-size:13px;color:#666">Docente: <b>${g.docente||"-"}</b></p>
+          ${filasFechas ? `
+            <table style="max-width:400px">
+              <tr><th>Fecha</th><th>Estado</th></tr>
+              ${filasFechas}
+            </table>
+          ` : `<p style="font-size:13px;color:#999">Aún no se ha registrado asistencia en esta materia.</p>`}
+          ${notaAsistencia!==null ? `
+            <p style="font-size:13px">Nota de asistencia (escala 0-5): <b>${notaAsistencia.toFixed(1)}</b>
+              ${itemAsistencia ? ` — vale <b>${itemAsistencia.peso}%</b> de la nota final` : ""}
+            </p>
+          ` : ""}
+        </div>
+      `;
+    });
+  });
+
+  document.getElementById("contenido").innerHTML = `
+    <h2 class="panel-title">Mi Asistencia</h2>
+    ${secciones || `<p style="color:#999">No se encontró información de asistencia para tus materias.</p>`}
   `;
 }
 
