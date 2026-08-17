@@ -3460,6 +3460,19 @@ function renderPromedioEstudiante(){
   `;
 }
 
+/* ======================================================================
+   MODAL genérico — ventana emergente centrada para que el estudiante no
+   tenga que bajar en la página a ver algo que ya pidió (ej. Notas Parciales).
+   ====================================================================== */
+function abrirModal(html){
+  document.getElementById("modalContenido").innerHTML = html;
+  document.getElementById("modalFondo").classList.add("abierto");
+}
+function cerrarModal(){
+  document.getElementById("modalFondo").classList.remove("abierto");
+  document.getElementById("modalContenido").innerHTML = "";
+}
+
 function renderConsultaMatriculaNotas(){
   const e = getEstudiantes()[usuarioActual.codigo];
   const registro = getMatriculas()[e.codigo];
@@ -3503,7 +3516,6 @@ function renderConsultaMatriculaNotas(){
       <tr><th>Asignatura</th><th>Grupo</th><th>Créditos</th><th>Notas Parciales</th></tr>
       ${filas}
     </table>
-    <div id="notaMateriaResultado"></div>
   `;
 
   window.__materiasConsulta = entradas;
@@ -3558,12 +3570,12 @@ function mostrarNotaMateria(indice){
         ? `<span style="color:#1e5631;font-weight:bold">Aprobada ✅</span>`
         : `<span style="color:#a83232;font-weight:bold">Reprobada ❌</span>`);
 
-  document.getElementById("notaMateriaResultado").innerHTML=`
-    <h3>Notas — ${materia}${etiquetaComponente}</h3>
+  abrirModal(`
+    <h3 style="margin-top:0">Notas — ${materia}${etiquetaComponente}</h3>
     <p style="font-size:13px;color:#666">Grupo ${g?g.grupo:"-"} · Docente: ${g?g.docente:"-"}</p>
     ${tablaItems}
     <p><b>Definitiva: ${definitiva || "Sin registrar"}</b> — ${estadoTexto}</p>
-  `;
+  `);
 }
 
 /* ======================================================================
@@ -4523,9 +4535,9 @@ function renderNotasDocente(){
 
         const listaItems = items.length
           ? items.map(it=>`
-              <span class="badge" style="background:#1e5631;margin:2px">
-                ${it.nombre} (${it.peso}%)
-                ${actasSubidas ? "" : `<span style="cursor:pointer;margin-left:6px" onclick="eliminarItemEvaluacion('${g.id}','${it.id}')">✕</span>`}
+              <span class="chip-item ${it.tipo==='asistencia' ? 'chip-asistencia' : ''}">
+                ${it.tipo==='asistencia' ? '✅ ' : ''}${it.nombre} (${it.peso}%)
+                ${actasSubidas ? "" : `<span class="quitar-chip" onclick="eliminarItemEvaluacion('${g.id}','${it.id}')">✕</span>`}
               </span>
             `).join(" ")
           : `<span style="font-size:12px;color:#999">Aún no hay ítems de evaluación.</span>`;
@@ -4538,45 +4550,46 @@ function renderNotasDocente(){
             const celdasItems = items.map(it=>{
               if(it.tipo==="asistencia"){
                 const v = calcularNotaAsistencia(g.id, e.codigo);
-                return `<td style="background:#f0f0f0"><b>${v===null?"-":v.toFixed(1)}</b><br><span style="font-size:10px;color:#999">auto</span></td>`;
+                return `<td><div class="celda-auto"><b>${v===null?"-":v.toFixed(1)}</b><br><span style="font-size:10px;color:#7c93a8">auto</span></div></td>`;
               }
               const notaItem = ((notas[g.id]||{})[e.codigo]||{})[it.id];
-              return `<td><input type="number" min="0" max="5" step="0.1"
+              return `<td><input type="number" min="0" max="5" step="0.1" class="input-nota"
                     id="nota_${g.id}_${e.codigo}_${it.id}"
                     value="${notaItem!==undefined?notaItem:""}"
                     onchange="guardarNotaItem('${g.id}','${e.codigo}','${it.id}', this.value)"
-                    ${actasSubidas ? "disabled" : ""}
-                    style="width:60px;text-align:center"></td>`;
+                    ${actasSubidas ? "disabled" : ""}></td>`;
             }).join("");
 
             return `<tr>
               <td>${e.codigo}</td>
-              <td style="text-align:left">${e.nombre}</td>
+              <td class="nombre-estudiante">${e.nombre}</td>
               ${celdasItems}
-              <td><b id="definitiva_${g.id}_${e.codigo}">${calcularDefinitivaGrupo(g.id, e.codigo)}</b></td>
+              <td class="celda-definitiva"><span id="definitiva_${g.id}_${e.codigo}">${calcularDefinitivaGrupo(g.id, e.codigo)}</span></td>
             </tr>`;
           }).join("");
         }
 
-        const encabezadoItems = items.map(it=>`<th>${it.nombre}<br><span style="font-weight:normal;font-size:11px">${it.peso}%</span></th>`).join("");
+        const encabezadoItems = items.map(it=>`<th>${it.tipo==='asistencia'?'✅ ':''}${it.nombre}<br><span style="font-weight:normal;font-size:11px;opacity:.85">${it.peso}%</span></th>`).join("");
 
         const puedeSubirActas = sumaPesos===100 && estudiantes.length>0 && !actasSubidas;
         const etiquetaPrograma = programas.length>1 ? ` — <span style="font-size:12px;color:#666">${programaNombre}</span>` : "";
+        const colorBarra = sumaPesos===100 ? '#1e5631' : sumaPesos>100 ? '#a83232' : '#e0a83a';
 
         secciones += `
-          <div style="border:1px solid #ddd;border-radius:8px;padding:14px;margin-bottom:20px;background:#fafafa">
-            <h3 style="margin-top:0">${materia}${g.componente ? " ("+(g.componente==='Teorico'?'Teórico':'Práctico')+")" : ""} — ${g.grupo}${etiquetaPrograma} ${actasSubidas ? '<span class="badge" style="background:#1e5631">Actas subidas</span>' : ""}</h3>
+          <div class="tarjeta-grupo-notas">
+            <h3>${materia}${g.componente ? " ("+(g.componente==='Teorico'?'Teórico':'Práctico')+")" : ""} — ${g.grupo}${etiquetaPrograma} ${actasSubidas ? '<span class="badge" style="background:#1e5631">Actas subidas</span>' : ""}</h3>
             ${g.componente ? `<p style="font-size:12px;color:#666;margin:2px 0 10px 0">Esta es una materia Teórico/Práctico: la nota Definitiva del estudiante en su historial solo se publica cuando <b>ambos</b> componentes (Teórico y Práctico) ya tengan actas subidas, y solo queda <b>aprobada</b> si el promedio ponderado da 3.0 o más <b>Y</b> cada componente por separado también dio 3.0 o más (no basta con que el promedio compense un componente perdido).</p>` : ""}
 
             <div style="margin:10px 0">
-              <b style="font-size:13px">Ítems de evaluación:</b>
-              (suma actual: <span style="color:${sumaPesos===100?'#1e5631':'#a83232'}">${sumaPesos}%</span>)<br>
+              <b style="font-size:13px">Ítems de evaluación</b>
+              <span style="font-size:12px;color:${sumaPesos===100?'#1e5631':'#a83232'};font-weight:bold"> — suma actual: ${sumaPesos}%</span>
+              <div class="barra-suma-items"><div class="relleno" style="width:${Math.min(sumaPesos,100)}%;background:${colorBarra}"></div></div>
               ${listaItems}
             </div>
 
             ${actasSubidas ? "" : `
             <div id="avisoItems_${g.id}"></div>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;background:#f4f6f4;border-radius:8px;padding:10px">
               <input id="item_nombre_${g.id}" placeholder="Ej: Taller 1" style="width:180px">
               <input id="item_peso_${g.id}" type="number" min="1" max="100" placeholder="% (ej: 5)" style="width:110px">
               <label style="font-size:12px;display:flex;align-items:center;gap:4px">
@@ -4585,10 +4598,12 @@ function renderNotasDocente(){
               <button class="btn-secundario" style="width:auto;padding:8px 14px" onclick="agregarItemEvaluacion('${g.id}')">+ Agregar ítem</button>
             </div>`}
 
-            <table>
-              <tr><th>Código</th><th>Nombre</th>${encabezadoItems}<th>Definitiva</th></tr>
-              ${filas}
-            </table>
+            <div style="overflow-x:auto">
+              <table class="tabla-notas-docente">
+                <tr><th>Código</th><th>Nombre</th>${encabezadoItems}<th>Definitiva</th></tr>
+                ${filas}
+              </table>
+            </div>
 
             ${puedeSubirActas ? `<button onclick="subirActas('${programaNombre}','${g.id}','${materia.replace(/'/g,"\\'")}')">📤 Subir Actas</button>` : ""}
             ${actasSubidas ? `<button class="btn-secundario" onclick="reabrirActas('${g.id}')">Reabrir Actas</button>` : ""}

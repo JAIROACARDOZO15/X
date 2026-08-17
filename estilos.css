@@ -120,6 +120,53 @@ th{background:#eef3ee}
 .materia-bloque b{display:block;font-size:11.5px;margin-bottom:2px}
 .horario-scroll{overflow-x:auto}
 
+/* ---------- MODAL (ventana emergente centrada, no requiere bajar la página) ---------- */
+.modal-fondo{
+  display:none;position:fixed;inset:0;background:rgba(20,30,25,.55);
+  z-index:1000;align-items:flex-start;justify-content:center;padding:24px 14px;overflow-y:auto;
+}
+.modal-fondo.abierto{display:flex}
+.modal-caja{
+  background:#fff;border-radius:12px;max-width:520px;width:100%;padding:22px 20px;
+  box-shadow:0 12px 30px rgba(0,0,0,.25);position:relative;margin-top:20px;
+}
+.modal-cerrar{
+  position:absolute;top:10px;right:14px;font-size:22px;cursor:pointer;color:#888;line-height:1;
+  background:none;border:none;width:auto;padding:4px 8px;
+}
+.modal-cerrar:hover{color:#a83232;background:none}
+
+/* ---------- NOTAS DEL DOCENTE (rediseño) ---------- */
+.tarjeta-grupo-notas{
+  background:#fff;border:1px solid #e0e4e0;border-radius:12px;padding:18px 20px;margin-bottom:20px;
+  box-shadow:0 2px 6px rgba(0,0,0,.05);
+}
+.tarjeta-grupo-notas h3{margin:0 0 4px 0;color:#1e5631}
+.barra-suma-items{
+  height:8px;border-radius:5px;background:#eee;overflow:hidden;margin:8px 0 14px 0;max-width:320px;
+}
+.barra-suma-items .relleno{height:100%;border-radius:5px;transition:width .2s ease}
+.chip-item{
+  display:inline-flex;align-items:center;gap:6px;background:#eef3ee;color:#1e5631;border:1px solid #cfe0cf;
+  border-radius:20px;padding:5px 6px 5px 12px;font-size:12px;font-weight:bold;margin:0 6px 6px 0;
+}
+.chip-item.chip-asistencia{background:#eaf3fb;color:#1a5d8a;border-color:#c6dff0}
+.chip-item .quitar-chip{
+  cursor:pointer;background:rgba(0,0,0,.08);border-radius:50%;width:18px;height:18px;
+  display:flex;align-items:center;justify-content:center;font-size:11px;color:#555;
+}
+.chip-item .quitar-chip:hover{background:#a83232;color:#fff}
+.tabla-notas-docente{width:100%;border-collapse:collapse;font-size:13px}
+.tabla-notas-docente th{background:#1e5631;color:#fff;padding:8px 6px}
+.tabla-notas-docente td{padding:6px;text-align:center;border-bottom:1px solid #eee}
+.tabla-notas-docente tr:hover td{background:#f7faf7}
+.tabla-notas-docente td.nombre-estudiante{text-align:left;font-weight:600}
+.celda-auto{background:#f3f6fb;border-radius:6px;padding:4px 2px}
+.celda-auto b{color:#1a5d8a}
+.input-nota{width:58px;text-align:center;padding:6px 2px;border:1px solid #ccc;border-radius:6px;margin:0}
+.input-nota:focus{border-color:#1e5631;outline:none}
+.celda-definitiva{font-weight:bold}
+
 @media (max-width:700px){
   .sidebar{width:100%;float:none;min-height:auto;display:none}
   .sidebar.mostrar-movil{display:block}
