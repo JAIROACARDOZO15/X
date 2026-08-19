@@ -4515,178 +4515,43 @@ function reabrirActas(grupoId){
 let grupoNotasDocenteSeleccionado = "";
 
 function renderNotasDocente(){
-  const programas = programasDelDocente();
-  const todosLosGrupos = getGrupos();
-  const notas = getNotas();
-  const configTodo = getConfigEvaluacion();
-  const actas = getActas();
-
-  // Reunimos todos los grupos del docente para mostrarlos en un único selector.
-  const opciones = [];
-  programas.forEach(programaNombre=>{
-    const grupos = todosLosGrupos[programaNombre] || {};
-    Object.keys(grupos).forEach(materia=>{
-      grupos[materia].forEach(g=>{
-        if(g.docente !== usuarioActual.nombre) return;
-        const estudiantes = estudiantesDeGrupo(programaNombre, materia, g.id);
-        if(estudiantes.length===0) return;
-        opciones.push({ programaNombre, materia, g, estudiantes });
-      });
-    });
-  });
-
-  // Si el grupo seleccionado ya no existe, seleccionamos el primero disponible.
-  if(!opciones.some(x=>x.g.id===grupoNotasDocenteSeleccionado)){
-    grupoNotasDocenteSeleccionado = opciones.length ? opciones[0].g.id : "";
-  }
-
-  const seleccionado = opciones.find(x=>x.g.id===grupoNotasDocenteSeleccionado);
-
-  if(!seleccionado){
-    document.getElementById("contenido").innerHTML=`
-      <h2 class="panel-title">Notas y Actas — ${usuarioActual.nombre}</h2>
-      <p style="color:#999">No tienes grupos con estudiantes matriculados este periodo.</p>
-    `;
-    return;
-  }
-
-  const { programaNombre, materia, g, estudiantes } = seleccionado;
-  const items = configTodo[g.id] || [];
-  const sumaPesos = items.reduce((a,it)=>a + (parseFloat(it.peso)||0), 0);
-  const actasSubidas = !!actas[g.id];
-
-  const listaItems = items.length
-    ? items.map(it=>`
-        <span class="chip-item ${it.tipo==='asistencia' ? 'chip-asistencia' : ''}">
-          ${it.tipo==='asistencia' ? '✅ ' : ''}${it.nombre} (${it.peso}%)
-          ${actasSubidas ? "" : `<span class="quitar-chip" onclick="eliminarItemEvaluacion('${g.id}','${it.id}')">✕</span>`}
-        </span>
-      `).join(" ")
-    : `<span style="font-size:12px;color:#999">Aún no hay ítems de evaluación.</span>`;
-
-  const filas = items.length===0
-    ? `<tr><td colspan="3">Agrega al menos un ítem de evaluación para poder calificar.</td></tr>`
-    : estudiantes.map(e=>{
-        const celdasItems = items.map(it=>{
-          if(it.tipo==="asistencia"){
-            const v = calcularNotaAsistencia(g.id, e.codigo);
-            return `<td><div class="celda-auto"><b>${v===null?"-":v.toFixed(1)}</b><br><span style="font-size:10px;color:#7c93a8">auto</span></div></td>`;
-          }
-          const notaItem = ((notas[g.id]||{})[e.codigo]||{})[it.id];
-          return `<td><input type="number" min="0" max="5" step="0.1" class="input-nota"
-                id="nota_${g.id}_${e.codigo}_${it.id}"
-                value="${notaItem!==undefined?notaItem:""}"
-                onchange="guardarNotaItem('${g.id}','${e.codigo}','${it.id}', this.value)"
-                ${actasSubidas ? "disabled" : ""}></td>`;
-        }).join("");
-
-        const definitiva = calcularDefinitivaGrupo(g.id, e.codigo);
-        const notaNum = parseFloat(definitiva);
-        const estado = isNaN(notaNum) ? "Pendiente" : notaNum >= 3 ? "Aprobado" : "Reprobado";
-        const claseEstado = isNaN(notaNum) ? "" : (notaNum >= 3 ? "estado-aprobado" : "estado-reprobado");
-
-        return `<tr class="fila-estudiante" data-estudiante="${(e.nombre+" "+e.codigo).toLowerCase().replace(/"/g,'&quot;')}">
-          <td>${e.codigo}</td>
-          <td class="nombre-estudiante">${e.nombre}</td>
-          ${celdasItems}
-          <td class="celda-definitiva"><span id="definitiva_${g.id}_${e.codigo}">${definitiva}</span></td>
-          <td><span class="estado-nota ${claseEstado}" id="estado_${g.id}_${e.codigo}">${estado}</span></td>
-        </tr>`;
-      }).join("");
-
-  const encabezadoItems = items.map(it=>`<th>${it.tipo==='asistencia'?'✅ ':''}${it.nombre}<br><span style="font-weight:normal;font-size:11px;opacity:.85">${it.peso}%</span></th>`).join("");
-  const puedeSubirActas = sumaPesos===100 && estudiantes.length>0 && !actasSubidas;
-  const colorBarra = sumaPesos===100 ? '#1e5631' : sumaPesos>100 ? '#a83232' : '#e0a83a';
-
-  const definitivas = estudiantes
-    .map(e=>parseFloat(calcularDefinitivaGrupo(g.id,e.codigo)))
-    .filter(n=>!isNaN(n));
-  const aprobados = definitivas.filter(n=>n>=3).length;
-  const reprobados = definitivas.filter(n=>n<3).length;
-  const promedio = definitivas.length ? (definitivas.reduce((a,b)=>a+b,0)/definitivas.length).toFixed(2) : "—";
-
-  const selectorOptions = opciones.map(x=>{
-    const componente = x.g.componente ? ` — ${x.g.componente==='Teorico'?'Teórico':'Práctico'}` : "";
-    const programa = programas.length>1 ? ` · ${x.programaNombre}` : "";
-    return `<option value="${x.g.id}" ${x.g.id===g.id?'selected':''}>${x.materia} — ${x.g.grupo}${componente}${programa}</option>`;
-  }).join("");
-
-  document.getElementById("contenido").innerHTML=`
-    <h2 class="panel-title">Notas y Actas — ${usuarioActual.nombre}</h2>
-
-    <div class="selector-materia-docente" style="margin:12px 0 18px;background:#f4f6f4;border-radius:10px;padding:14px">
-      <label for="selectorGrupoNotas" style="display:block;font-weight:bold;margin-bottom:7px">Selecciona la materia</label>
-      <select id="selectorGrupoNotas" style="width:100%;padding:10px;border:1px solid #cfd8d0;border-radius:8px;background:white;font-size:15px">
-        ${selectorOptions}
-      </select>
-      <p style="margin:7px 0 0;font-size:12px;color:#777">Solo se muestra una materia a la vez.</p>
-    </div>
-
-    <div class="tarjeta-grupo-notas">
-      <h3>${materia}${g.componente ? " ("+(g.componente==='Teorico'?'Teórico':'Práctico')+")" : ""} — ${g.grupo} ${actasSubidas ? '<span class="badge" style="background:#1e5631">Actas subidas</span>' : ""}</h3>
-      ${g.componente ? `<p style="font-size:12px;color:#666;margin:2px 0 10px 0">Esta es una materia Teórico/Práctico: la nota Definitiva del estudiante en su historial solo se publica cuando <b>ambos</b> componentes ya tengan actas subidas.</p>` : ""}
-
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0">
-        <div style="padding:8px 12px;background:#edf6ef;border-radius:8px"><b>${estudiantes.length}</b> estudiantes</div>
-        <div style="padding:8px 12px;background:#edf6ef;border-radius:8px"><b>${aprobados}</b> aprobados</div>
-        <div style="padding:8px 12px;background:#fff3e0;border-radius:8px"><b>${reprobados}</b> reprobados</div>
-        <div style="padding:8px 12px;background:#eef3f7;border-radius:8px">Promedio: <b>${promedio}</b></div>
-      </div>
-
-      <div style="margin:10px 0">
-        <b style="font-size:13px">Ítems de evaluación</b>
-        <span style="font-size:12px;color:${sumaPesos===100?'#1e5631':'#a83232'};font-weight:bold"> — suma actual: ${sumaPesos}%</span>
-        <div class="barra-suma-items"><div class="relleno" style="width:${Math.min(sumaPesos,100)}%;background:${colorBarra}"></div></div>
-        ${listaItems}
-      </div>
-
-      ${actasSubidas ? "" : `
-      <div id="avisoItems_${g.id}"></div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;background:#f4f6f4;border-radius:8px;padding:10px">
-        <input id="item_nombre_${g.id}" placeholder="Ej: Taller 1" style="width:180px">
-        <input id="item_peso_${g.id}" type="number" min="1" max="100" placeholder="% (ej: 5)" style="width:110px">
-        <label style="font-size:12px;display:flex;align-items:center;gap:4px">
-          <input type="checkbox" id="item_asistencia_${g.id}"> Es el ítem de Asistencia (se calcula solo)
-        </label>
-        <button class="btn-secundario" style="width:auto;padding:8px 14px" onclick="agregarItemEvaluacion('${g.id}')">+ Agregar ítem</button>
-      </div>`}
-
-      <div style="margin:10px 0">
-        <label for="buscarEstudiante_${g.id}" style="font-size:13px;font-weight:bold">Buscar estudiante</label>
-        <input id="buscarEstudiante_${g.id}" type="search" placeholder="Nombre o código..." style="width:100%;max-width:360px;padding:9px;margin-top:5px;border:1px solid #ccd5ce;border-radius:8px">
-      </div>
-
-      <div style="overflow-x:auto">
-        <table class="tabla-notas-docente">
-          <tr><th>Código</th><th>Nombre</th>${encabezadoItems}<th>Definitiva</th><th>Estado</th></tr>
-          ${filas}
-        </table>
-      </div>
-
-      ${puedeSubirActas ? `<button onclick="subirActas('${programaNombre}','${g.id}','${materia.replace(/'/g,"\\'")}')">📤 Subir Actas</button>` : ""}
-      ${actasSubidas ? `<button class="btn-secundario" onclick="reabrirActas('${g.id}')">Reabrir Actas</button>` : ""}
-      ${(!actasSubidas && sumaPesos!==100) ? `<p style="font-size:12px;color:#999">El botón para subir actas aparece cuando los ítems sumen 100%.</p>` : ""}
-    </div>
-  `;
-
-  const selector = document.getElementById("selectorGrupoNotas");
-  if(selector){
-    selector.addEventListener("change", function(){
-      grupoNotasDocenteSeleccionado = this.value;
-      renderNotasDocente();
-    });
-  }
-
-  const buscador = document.getElementById(`buscarEstudiante_${g.id}`);
-  if(buscador){
-    buscador.addEventListener("input", function(){
-      const termino = this.value.trim().toLowerCase();
-      document.querySelectorAll(`#contenido .fila-estudiante`).forEach(fila=>{
-        fila.style.display = !termino || fila.dataset.estudiante.includes(termino) ? "" : "none";
-      });
-    });
-  }
+  const programas=programasDelDocente(), gruposTodo=getGrupos(), configs=getConfigEvaluacion(), actas=getActas();
+  window.centroNotasDocente=window.centroNotasDocente||{programa:programas[0]||"",materia:"",grupoId:""};
+  const s=window.centroNotasDocente;
+  if(!programas.includes(s.programa)){s.programa=programas[0]||"";s.materia="";s.grupoId="";}
+  const gp=gruposTodo[s.programa]||{};
+  const materias=Object.keys(gp).filter(m=>(gp[m]||[]).some(g=>g.docente===usuarioActual.nombre));
+  if(!materias.includes(s.materia)){s.materia=materias[0]||"";s.grupoId="";}
+  const grupos=(gp[s.materia]||[]).filter(g=>g.docente===usuarioActual.nombre);
+  if(!grupos.some(g=>g.id===s.grupoId))s.grupoId=grupos.length===1?grupos[0].id:"";
+  const g=grupos.find(x=>x.id===s.grupoId);
+  if(g){renderPanelGrupoCentroNotas(s.programa,s.materia,g);return;}
+  const cards=grupos.map(x=>{
+    const es=estudiantesDeGrupo(s.programa,s.materia,x.id), its=configs[x.id]||[], ns=getNotas();
+    let done=0;
+    es.forEach(e=>{const n=((ns[x.id]||{})[e.codigo])||{};const man=its.filter(i=>i.tipo!=="asistencia");if(man.every(i=>n[i.id]!==undefined&&n[i.id]!==""))done++;});
+    const pct=es.length?Math.round(done/es.length*100):0;
+    return `<button class="cn-group" onclick="abrirGrupoCentroNotas('${String(x.id).replace(/'/g,"\\'")}')"><div><b>Grupo ${x.grupo||"-"}</b><span>${x.componente?(x.componente==='Teorico'?'Teórico':'Práctico'):''}</span></div><strong>→</strong><p>👥 ${es.length} estudiantes · ${pct}% completo</p><div class="cn-progress"><i style="width:${pct}%"></i></div><small>${actas[x.id]?'✓ Acta subida':'● Acta abierta'}</small></button>`;
+  }).join('');
+  document.getElementById('contenido').innerHTML=`<style>
+  .cn{max-width:1180px;margin:auto}.cn-hero{padding:25px;border:1px solid #dfe8e1;border-radius:20px;background:linear-gradient(135deg,#f5faf6,#fff);margin-bottom:18px}.cn-ey{font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#1e5631}.cn h2{margin:5px 0;font-size:28px}.cn-sub{color:#667085}.cn-selects{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:20px}.cn-selects label{font-size:12px;font-weight:700}.cn-selects select,.cn-search{width:100%;box-sizing:border-box;margin-top:6px;padding:12px;border:1px solid #d0d5dd;border-radius:11px;background:white}.cn-title{display:flex;justify-content:space-between;align-items:end;margin:22px 0 12px}.cn-title h3{margin:0}.cn-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:14px}.cn-group{position:relative;text-align:left;border:1px solid #dfe5e1;border-radius:17px;background:white;padding:18px;cursor:pointer;transition:.18s}.cn-group:hover{transform:translateY(-2px);border-color:#1e5631;box-shadow:0 8px 24px #00000010}.cn-group div{display:flex;justify-content:space-between}.cn-group b{font-size:20px}.cn-group span,.cn-group small{color:#667085}.cn-group strong{position:absolute;right:18px;top:18px;color:#1e5631;font-size:20px}.cn-group p{font-size:12px;color:#475467;margin:18px 0 8px}.cn-progress{height:7px;background:#edf1ee;border-radius:9px;overflow:hidden}.cn-progress i{display:block;height:100%;background:#1e5631}.cn-group small{display:block;margin-top:10px}.cn-head{display:flex;justify-content:space-between;gap:12px;align-items:start}.cn-btn{padding:9px 13px;border-radius:9px;border:1px solid #d0d5dd;background:white;font-weight:700;cursor:pointer}.cn-primary{background:#1e5631;color:#fff;border-color:#1e5631}.cn-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}.cn-stat{background:#fff;border:1px solid #dfe5e1;border-radius:14px;padding:14px}.cn-stat b{display:block;font-size:24px;margin-top:5px}.cn-stat span{font-size:10px;text-transform:uppercase;color:#667085;font-weight:800}.cn-layout{display:grid;grid-template-columns:280px 1fr;gap:14px}.cn-card{background:#fff;border:1px solid #dfe5e1;border-radius:16px;padding:16px}.cn-item{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #eef1ef;font-size:13px}.cn-tablewrap{overflow:auto;max-height:610px}.cn-table{width:100%;border-collapse:collapse;min-width:720px}.cn-table th{position:sticky;top:0;background:#f7f9f7;z-index:1;font-size:11px;color:#475467;text-align:left;padding:10px;border-bottom:1px solid #dfe5e1}.cn-table td{padding:9px;border-bottom:1px solid #eef1ef;font-size:12px}.cn-input{width:64px;padding:8px;border:1px solid #cfd8d2;border-radius:8px;text-align:center;font-weight:700}.cn-input:focus{outline:2px solid #1e563133;border-color:#1e5631}.cn-def{font-weight:900;font-size:15px}.cn-status{padding:5px 8px;border-radius:99px;font-size:10px;font-weight:800}.cn-ok{background:#eaf7ea;color:#1e5631}.cn-bad{background:#fdecea;color:#a83232}.cn-warn{background:#fff4df;color:#8a5a00}.cn-toolbar{display:flex;justify-content:space-between;gap:10px;align-items:center;padding-bottom:12px}.cn-back{border:0;background:none;color:#1e5631;font-weight:800;cursor:pointer;padding:0;margin-bottom:12px}.cn-note{font-size:11px;color:#667085}.cn-save{font-size:10px;color:#1e5631;margin-left:4px}.cn-acta{display:flex;justify-content:space-between;gap:10px;align-items:center;padding-top:13px}.cn-bar{height:7px;background:#edf1ee;border-radius:8px;overflow:hidden;margin-top:6px}.cn-bar i{display:block;height:100%;background:#1e5631}@media(max-width:800px){.cn-selects,.cn-layout{grid-template-columns:1fr}.cn-stats{grid-template-columns:1fr 1fr}.cn-head{flex-direction:column}}
+  </style><div class="cn"><div class="cn-hero"><div class="cn-ey">Panel docente</div><h2>Centro de Calificaciones</h2><div class="cn-sub">Elige una materia y luego el grupo. Cada grupo mantiene sus propios estudiantes y notas.</div><div class="cn-selects"><div><label>Programa</label><select onchange="cambiarProgramaCentroNotas(this.value)">${programas.map(p=>`<option value="${String(p).replace(/"/g,'&quot;')}" ${p===s.programa?'selected':''}>${p}</option>`).join('')}</select></div><div><label>Materia</label><select onchange="cambiarMateriaCentroNotas(this.value)">${materias.map(m=>`<option value="${String(m).replace(/"/g,'&quot;')}" ${m===s.materia?'selected':''}>${m} · ${(gp[m]||[]).filter(x=>x.docente===usuarioActual.nombre).length} grupo(s)</option>`).join('')}</select></div></div></div><div class="cn-title"><div><h3>${s.materia||'Mis materias'}</h3><div class="cn-sub">Selecciona el grupo que deseas calificar.</div></div></div><div class="cn-grid">${cards||'<p style="color:#999">No hay grupos con estudiantes matriculados.</p>'}</div></div>`;
 }
+function cambiarProgramaCentroNotas(p){window.centroNotasDocente=window.centroNotasDocente||{};window.centroNotasDocente.programa=p;window.centroNotasDocente.materia='';window.centroNotasDocente.grupoId='';renderNotasDocente()}
+function cambiarMateriaCentroNotas(m){window.centroNotasDocente=window.centroNotasDocente||{};window.centroNotasDocente.materia=m;window.centroNotasDocente.grupoId='';renderNotasDocente()}
+function abrirGrupoCentroNotas(id){window.centroNotasDocente=window.centroNotasDocente||{};window.centroNotasDocente.grupoId=id;renderNotasDocente()}
+function volverGruposCentroNotas(){window.centroNotasDocente=window.centroNotasDocente||{};window.centroNotasDocente.grupoId='';renderNotasDocente()}
+function renderPanelGrupoCentroNotas(programa,materia,g){
+  const es=estudiantesDeGrupo(programa,materia,g.id), its=getConfigEvaluacion()[g.id]||[], ns=getNotas(), acta=!!getActas()[g.id], peso=its.reduce((a,i)=>a+(parseFloat(i.peso)||0),0);let complete=0,ap=0,rep=0,pend=0,sum=0,cnt=0;
+  es.forEach(e=>{const n=((ns[g.id]||{})[e.codigo])||{},man=its.filter(i=>i.tipo!=='asistencia');if(man.every(i=>n[i.id]!==undefined&&n[i.id]!==''))complete++;else pend++;const d=parseFloat(calcularDefinitivaGrupo(g.id,e.codigo));if(!isNaN(d)){cnt++;sum+=d;if(d>=3)ap++;else rep++}});
+  const promedio=cnt?(sum/cnt).toFixed(2):'—',pct=es.length?Math.round(complete/es.length*100):0,puede=peso===100&&es.length&&!acta;
+  const filas=es.map(e=>{const n=((ns[g.id]||{})[e.codigo])||{},d=parseFloat(calcularDefinitivaGrupo(g.id,e.codigo)),st=isNaN(d)?'Pendiente':d>=3?'Aprobada':'Reprobada',cl=st==='Aprobada'?'cn-ok':st==='Reprobada'?'cn-bad':'cn-warn';return `<tr><td><b>${e.nombre}</b><br><span class="cn-note">${e.codigo}</span></td>${its.map(i=>{if(i.tipo==='asistencia'){const v=calcularNotaAsistencia(g.id,e.codigo);return `<td>${v===null?'—':v.toFixed(1)}<br><span class="cn-note">auto</span></td>`}const v=n[i.id];return `<td><input class="cn-input" type="number" min="0" max="5" step="0.1" value="${v!==undefined?v:''}" ${acta?'disabled':''} onchange="guardarNotaItem('${g.id}','${e.codigo}','${i.id}',this.value);marcarGuardadoNotaPro(this)" onkeydown="navegarNotaPro(event,this)"><span class="cn-save"></span></td>`}).join('')}<td class="cn-def">${isNaN(d)?'—':d.toFixed(1)}</td><td><span class="cn-status ${cl}">${st}</span></td></tr>`}).join('');
+  document.getElementById('contenido').innerHTML=`<div class="cn"><button class="cn-back" onclick="volverGruposCentroNotas()">← Cambiar grupo</button><div class="cn-head"><div><h2>${materia} · Grupo ${g.grupo||'-'}</h2><div class="cn-sub">${g.componente?(g.componente==='Teorico'?'Teórico':'Práctico')+' · ':''}${es.length} estudiantes</div></div><div><button class="cn-btn" onclick="volverGruposCentroNotas()">Mis grupos</button> ${puede?`<button class="cn-btn cn-primary" onclick="subirActas('${programa}','${g.id}','${materia.replace(/'/g,"\\'")}')">🔒 Subir acta</button>`:''} ${acta?`<button class="cn-btn" onclick="reabrirActas('${g.id}')">↺ Reabrir</button>`:''}</div></div><div class="cn-stats"><div class="cn-stat"><span>Estudiantes</span><b>${es.length}</b></div><div class="cn-stat"><span>Aprobados</span><b>${ap}</b></div><div class="cn-stat"><span>Pendientes</span><b>${pend}</b></div><div class="cn-stat"><span>Promedio</span><b>${promedio}</b></div></div><div class="cn-layout"><aside class="cn-card"><b>📋 Evaluaciones</b>${its.map(i=>`<div class="cn-item"><span>${i.tipo==='asistencia'?'✅ ':''}${i.nombre}</span><b>${i.peso}%</b></div>`).join('')||'<p class="cn-note">No hay evaluaciones configuradas.</p>'}<div class="cn-item"><b>Total</b><b>${peso}%</b></div><div class="cn-note">${peso===100?'✓ Ponderación lista.':'⚠ La ponderación debe sumar 100%.'}</div></aside><section class="cn-card"><div class="cn-toolbar"><div><b>⚡ Calificaciones</b><div class="cn-note">Enter/Tab avanza al siguiente campo.</div></div><input id="buscarEstudianteNotasPro" class="cn-search" style="max-width:280px;margin:0" placeholder="🔎 Buscar estudiante o código" oninput="filtrarEstudiantesNotasPro(this.value)"></div><div class="cn-tablewrap"><table class="cn-table"><thead><tr><th>Estudiante</th>${its.map(i=>`<th>${i.nombre}<br><span class="cn-note">${i.peso}%</span></th>`).join('')}<th>Definitiva</th><th>Estado</th></tr></thead><tbody id="tbodyNotasPro">${filas}</tbody></table></div><div class="cn-acta"><div><b>${complete}/${es.length}</b> completos<div class="cn-bar"><i style="width:${pct}%"></i></div></div><div>${puede?`<button class="cn-btn cn-primary" onclick="subirActas('${programa}','${g.id}','${materia.replace(/'/g,"\\'")}')">📤 Cerrar y subir acta</button>`:acta?'<span style="color:#1e5631;font-weight:800">✓ Acta oficial subida</span>':'<span class="cn-note">Completa las notas y la ponderación para subir el acta.</span>'}</div></div></section></div></div>`;
+}
+function filtrarEstudiantesNotasPro(v){const q=String(v||'').toLowerCase().trim();document.querySelectorAll('#tbodyNotasPro tr').forEach(r=>r.style.display=!q||r.innerText.toLowerCase().includes(q)?'':'none')}
+function marcarGuardadoNotaPro(input){const s=input.parentElement.querySelector('.cn-save');if(!s)return;s.textContent='✓';setTimeout(()=>s.textContent='',1200)}
+function navegarNotaPro(e,input){if(e.key!=='Enter'&&e.key!=='Tab')return;e.preventDefault();const a=[...document.querySelectorAll('.cn-input:not(:disabled)')],i=a.indexOf(input);if(i>=0&&i<a.length-1){a[i+1].focus();a[i+1].select()}}
+
 
 /* ======================================================================
    ASISTENCIA — DOCENTE (pasar lista) y ESTUDIANTE (consultar la suya)
