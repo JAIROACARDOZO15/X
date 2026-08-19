@@ -522,25 +522,14 @@ async function sincronizarActasEvaluacionHistorialDesdeSupabase(){
 
 async function empujarActasASupabase(obj){
   if(!supabaseClient) return;
-
   try{
-    const filas = Object.keys(obj).map(grupoId => ({
-      grupo_id: grupoId,
-      data: obj[grupoId]
-    }));
-
-    if(!filas.length) return;
-
-    const { error } = await supabaseClient
-      .from("actas")
-      .upsert(filas, { onConflict: "grupo_id" });
-
-    if(error){
-      console.error("No se pudo guardar actas en Supabase:", error);
+    await supabaseClient.from("actas").delete().neq("grupo_id","___ninguno___");
+    const filas = Object.keys(obj).map(grupoId=>({grupo_id:grupoId, data:obj[grupoId]}));
+    if(filas.length){
+      const { error } = await supabaseClient.from("actas").insert(filas);
+      if(error) console.error("No se pudo guardar actas en Supabase:", error);
     }
-  }catch(err){
-    console.error("No se pudo guardar actas en Supabase:", err);
-  }
+  }catch(err){ console.error("No se pudo guardar actas en Supabase:", err); }
 }
 async function empujarConfigEvaluacionASupabase(obj){
   if(!supabaseClient) return;
@@ -582,32 +571,16 @@ async function empujarEvaluacionPendienteASupabase(obj){
 }
 async function empujarHistorialASupabase(obj){
   if(!supabaseClient) return;
-
   try{
-    const filas = Object.keys(obj).map(codigo => ({
-      codigo: codigo,
-      data: obj[codigo]
-    }));
-
-    if(!filas.length) return;
-
-    const { error } = await supabaseClient
-      .from("historial_academico")
-      .upsert(filas, { onConflict: "codigo" });
-
-    if(error){
-      console.error(
-        "No se pudo guardar historial_academico en Supabase:",
-        error
-      );
+    await supabaseClient.from("historial_academico").delete().neq("codigo","___ninguno___");
+    const filas = Object.keys(obj).map(codigo=>({codigo, data:obj[codigo]}));
+    if(filas.length){
+      const { error } = await supabaseClient.from("historial_academico").insert(filas);
+      if(error) console.error("No se pudo guardar historial_academico en Supabase:", error);
     }
-  }catch(err){
-    console.error(
-      "No se pudo guardar historial_academico en Supabase:",
-      err
-    );
-  }
-}async function empujarNivelesEstudiantesASupabase(obj){
+  }catch(err){ console.error("No se pudo guardar historial_academico en Supabase:", err); }
+}
+async function empujarNivelesEstudiantesASupabase(obj){
   if(!supabaseClient) return;
   try{
     await supabaseClient.from("nivel_estudiante").delete().neq("codigo","___ninguno___");
@@ -3837,40 +3810,26 @@ function renderHorarioEstudiante(){
 
 function obtenerNivelIndice(codigo, programaNombre, nivelesKeys){
   const niveles = getNivelesEstudiantes();
+  if(niveles[codigo] !== undefined){
+    return Math.min(Math.max(niveles[codigo],0), nivelesKeys.length-1);
+  }
+  // Bootstrap: si el estudiante no tiene contador de nivel todavía, se calcula
+  // una sola vez a partir de su historial y se guarda para siempre.
   const historial = getHistorial()[codigo] || {};
   const data = getProgramas()[programaNombre] || {niveles:{}};
-
-  // Una materia está aprobada si aparece en el historial
-  // y su definitiva está marcada como aprobada.
-  const estaAprobada = materia =>
-    !!(historial[materia] && historial[materia].aprobada);
-
-  // El nivel actual siempre es el PRIMER nivel que tenga
-  // al menos una materia pendiente.
-  //
-  // Si Nivel 1 está completamente aprobado,
-  // el estudiante pasa automáticamente a Nivel 2.
-  let idxActual = nivelesKeys.length - 1;
-
-  for(let i = 0; i < nivelesKeys.length; i++){
+  const estaAprobada = m => !!(historial[m] && historial[m].aprobada);
+  let idx = 0;
+  for(let i=0;i<nivelesKeys.length;i++){
     const materias = data.niveles[nivelesKeys[i]] || [];
-
-    const tienePendientes = materias.some(m => !estaAprobada(m));
-
-    if(tienePendientes){
-      idxActual = i;
-      break;
-    }
+    const pend = materias.some(m=>!estaAprobada(m));
+    if(pend){ idx=i; break; }
+    idx = Math.min(i+1, nivelesKeys.length-1);
   }
-
-  // Guardamos el nivel actualizado para que quede sincronizado.
-  if(niveles[codigo] !== idxActual){
-    niveles[codigo] = idxActual;
-    saveNivelesEstudiantes(niveles);
-  }
-
-  return idxActual;
+  niveles[codigo] = idx;
+  saveNivelesEstudiantes(niveles);
+  return idx;
 }
+
 function calcularSituacionAcademica(codigo, programaNombre){
   const data = getProgramas()[programaNombre] || {niveles:{}, creditos:{}};
   const nivelesKeys = Object.keys(data.niveles || {});
@@ -4553,6 +4512,8 @@ function reabrirActas(grupoId){
   });
 }
 
+let grupoNotasDocenteSeleccionado = "";
+
 function renderNotasDocente(){
   const programas = programasDelDocente();
   const todosLosGrupos = getGrupos();
@@ -4560,105 +4521,171 @@ function renderNotasDocente(){
   const configTodo = getConfigEvaluacion();
   const actas = getActas();
 
-  let secciones = "";
+  // Reunimos todos los grupos del docente para mostrarlos en un único selector.
+  const opciones = [];
   programas.forEach(programaNombre=>{
     const grupos = todosLosGrupos[programaNombre] || {};
     Object.keys(grupos).forEach(materia=>{
       grupos[materia].forEach(g=>{
         if(g.docente !== usuarioActual.nombre) return;
-
         const estudiantes = estudiantesDeGrupo(programaNombre, materia, g.id);
-        if(estudiantes.length===0) return; // sin estudiantes matriculados este semestre: no se muestra
-
-        const items = configTodo[g.id] || [];
-        const sumaPesos = items.reduce((a,it)=>a + (parseFloat(it.peso)||0), 0);
-        const actasSubidas = !!actas[g.id];
-
-        const listaItems = items.length
-          ? items.map(it=>`
-              <span class="chip-item ${it.tipo==='asistencia' ? 'chip-asistencia' : ''}">
-                ${it.tipo==='asistencia' ? '✅ ' : ''}${it.nombre} (${it.peso}%)
-                ${actasSubidas ? "" : `<span class="quitar-chip" onclick="eliminarItemEvaluacion('${g.id}','${it.id}')">✕</span>`}
-              </span>
-            `).join(" ")
-          : `<span style="font-size:12px;color:#999">Aún no hay ítems de evaluación.</span>`;
-
-        let filas;
-        if(items.length===0){
-          filas = `<tr><td colspan="3">Agrega al menos un ítem de evaluación para poder calificar.</td></tr>`;
-        } else {
-          filas = estudiantes.map(e=>{
-            const celdasItems = items.map(it=>{
-              if(it.tipo==="asistencia"){
-                const v = calcularNotaAsistencia(g.id, e.codigo);
-                return `<td><div class="celda-auto"><b>${v===null?"-":v.toFixed(1)}</b><br><span style="font-size:10px;color:#7c93a8">auto</span></div></td>`;
-              }
-              const notaItem = ((notas[g.id]||{})[e.codigo]||{})[it.id];
-              return `<td><input type="number" min="0" max="5" step="0.1" class="input-nota"
-                    id="nota_${g.id}_${e.codigo}_${it.id}"
-                    value="${notaItem!==undefined?notaItem:""}"
-                    onchange="guardarNotaItem('${g.id}','${e.codigo}','${it.id}', this.value)"
-                    ${actasSubidas ? "disabled" : ""}></td>`;
-            }).join("");
-
-            return `<tr>
-              <td>${e.codigo}</td>
-              <td class="nombre-estudiante">${e.nombre}</td>
-              ${celdasItems}
-              <td class="celda-definitiva"><span id="definitiva_${g.id}_${e.codigo}">${calcularDefinitivaGrupo(g.id, e.codigo)}</span></td>
-            </tr>`;
-          }).join("");
-        }
-
-        const encabezadoItems = items.map(it=>`<th>${it.tipo==='asistencia'?'✅ ':''}${it.nombre}<br><span style="font-weight:normal;font-size:11px;opacity:.85">${it.peso}%</span></th>`).join("");
-
-        const puedeSubirActas = sumaPesos===100 && estudiantes.length>0 && !actasSubidas;
-        const etiquetaPrograma = programas.length>1 ? ` — <span style="font-size:12px;color:#666">${programaNombre}</span>` : "";
-        const colorBarra = sumaPesos===100 ? '#1e5631' : sumaPesos>100 ? '#a83232' : '#e0a83a';
-
-        secciones += `
-          <div class="tarjeta-grupo-notas">
-            <h3>${materia}${g.componente ? " ("+(g.componente==='Teorico'?'Teórico':'Práctico')+")" : ""} — ${g.grupo}${etiquetaPrograma} ${actasSubidas ? '<span class="badge" style="background:#1e5631">Actas subidas</span>' : ""}</h3>
-            ${g.componente ? `<p style="font-size:12px;color:#666;margin:2px 0 10px 0">Esta es una materia Teórico/Práctico: la nota Definitiva del estudiante en su historial solo se publica cuando <b>ambos</b> componentes (Teórico y Práctico) ya tengan actas subidas, y solo queda <b>aprobada</b> si el promedio ponderado da 3.0 o más <b>Y</b> cada componente por separado también dio 3.0 o más (no basta con que el promedio compense un componente perdido).</p>` : ""}
-
-            <div style="margin:10px 0">
-              <b style="font-size:13px">Ítems de evaluación</b>
-              <span style="font-size:12px;color:${sumaPesos===100?'#1e5631':'#a83232'};font-weight:bold"> — suma actual: ${sumaPesos}%</span>
-              <div class="barra-suma-items"><div class="relleno" style="width:${Math.min(sumaPesos,100)}%;background:${colorBarra}"></div></div>
-              ${listaItems}
-            </div>
-
-            ${actasSubidas ? "" : `
-            <div id="avisoItems_${g.id}"></div>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;background:#f4f6f4;border-radius:8px;padding:10px">
-              <input id="item_nombre_${g.id}" placeholder="Ej: Taller 1" style="width:180px">
-              <input id="item_peso_${g.id}" type="number" min="1" max="100" placeholder="% (ej: 5)" style="width:110px">
-              <label style="font-size:12px;display:flex;align-items:center;gap:4px">
-                <input type="checkbox" id="item_asistencia_${g.id}"> Es el ítem de Asistencia (se calcula solo)
-              </label>
-              <button class="btn-secundario" style="width:auto;padding:8px 14px" onclick="agregarItemEvaluacion('${g.id}')">+ Agregar ítem</button>
-            </div>`}
-
-            <div style="overflow-x:auto">
-              <table class="tabla-notas-docente">
-                <tr><th>Código</th><th>Nombre</th>${encabezadoItems}<th>Definitiva</th></tr>
-                ${filas}
-              </table>
-            </div>
-
-            ${puedeSubirActas ? `<button onclick="subirActas('${programaNombre}','${g.id}','${materia.replace(/'/g,"\\'")}')">📤 Subir Actas</button>` : ""}
-            ${actasSubidas ? `<button class="btn-secundario" onclick="reabrirActas('${g.id}')">Reabrir Actas</button>` : ""}
-            ${(!actasSubidas && sumaPesos!==100) ? `<p style="font-size:12px;color:#999">El botón para subir actas aparece cuando los ítems sumen 100%.</p>` : ""}
-          </div>
-        `;
+        if(estudiantes.length===0) return;
+        opciones.push({ programaNombre, materia, g, estudiantes });
       });
     });
   });
 
+  // Si el grupo seleccionado ya no existe, seleccionamos el primero disponible.
+  if(!opciones.some(x=>x.g.id===grupoNotasDocenteSeleccionado)){
+    grupoNotasDocenteSeleccionado = opciones.length ? opciones[0].g.id : "";
+  }
+
+  const seleccionado = opciones.find(x=>x.g.id===grupoNotasDocenteSeleccionado);
+
+  if(!seleccionado){
+    document.getElementById("contenido").innerHTML=`
+      <h2 class="panel-title">Notas y Actas — ${usuarioActual.nombre}</h2>
+      <p style="color:#999">No tienes grupos con estudiantes matriculados este periodo.</p>
+    `;
+    return;
+  }
+
+  const { programaNombre, materia, g, estudiantes } = seleccionado;
+  const items = configTodo[g.id] || [];
+  const sumaPesos = items.reduce((a,it)=>a + (parseFloat(it.peso)||0), 0);
+  const actasSubidas = !!actas[g.id];
+
+  const listaItems = items.length
+    ? items.map(it=>`
+        <span class="chip-item ${it.tipo==='asistencia' ? 'chip-asistencia' : ''}">
+          ${it.tipo==='asistencia' ? '✅ ' : ''}${it.nombre} (${it.peso}%)
+          ${actasSubidas ? "" : `<span class="quitar-chip" onclick="eliminarItemEvaluacion('${g.id}','${it.id}')">✕</span>`}
+        </span>
+      `).join(" ")
+    : `<span style="font-size:12px;color:#999">Aún no hay ítems de evaluación.</span>`;
+
+  const filas = items.length===0
+    ? `<tr><td colspan="3">Agrega al menos un ítem de evaluación para poder calificar.</td></tr>`
+    : estudiantes.map(e=>{
+        const celdasItems = items.map(it=>{
+          if(it.tipo==="asistencia"){
+            const v = calcularNotaAsistencia(g.id, e.codigo);
+            return `<td><div class="celda-auto"><b>${v===null?"-":v.toFixed(1)}</b><br><span style="font-size:10px;color:#7c93a8">auto</span></div></td>`;
+          }
+          const notaItem = ((notas[g.id]||{})[e.codigo]||{})[it.id];
+          return `<td><input type="number" min="0" max="5" step="0.1" class="input-nota"
+                id="nota_${g.id}_${e.codigo}_${it.id}"
+                value="${notaItem!==undefined?notaItem:""}"
+                onchange="guardarNotaItem('${g.id}','${e.codigo}','${it.id}', this.value)"
+                ${actasSubidas ? "disabled" : ""}></td>`;
+        }).join("");
+
+        const definitiva = calcularDefinitivaGrupo(g.id, e.codigo);
+        const notaNum = parseFloat(definitiva);
+        const estado = isNaN(notaNum) ? "Pendiente" : notaNum >= 3 ? "Aprobado" : "Reprobado";
+        const claseEstado = isNaN(notaNum) ? "" : (notaNum >= 3 ? "estado-aprobado" : "estado-reprobado");
+
+        return `<tr class="fila-estudiante" data-estudiante="${(e.nombre+" "+e.codigo).toLowerCase().replace(/"/g,'&quot;')}">
+          <td>${e.codigo}</td>
+          <td class="nombre-estudiante">${e.nombre}</td>
+          ${celdasItems}
+          <td class="celda-definitiva"><span id="definitiva_${g.id}_${e.codigo}">${definitiva}</span></td>
+          <td><span class="estado-nota ${claseEstado}" id="estado_${g.id}_${e.codigo}">${estado}</span></td>
+        </tr>`;
+      }).join("");
+
+  const encabezadoItems = items.map(it=>`<th>${it.tipo==='asistencia'?'✅ ':''}${it.nombre}<br><span style="font-weight:normal;font-size:11px;opacity:.85">${it.peso}%</span></th>`).join("");
+  const puedeSubirActas = sumaPesos===100 && estudiantes.length>0 && !actasSubidas;
+  const colorBarra = sumaPesos===100 ? '#1e5631' : sumaPesos>100 ? '#a83232' : '#e0a83a';
+
+  const definitivas = estudiantes
+    .map(e=>parseFloat(calcularDefinitivaGrupo(g.id,e.codigo)))
+    .filter(n=>!isNaN(n));
+  const aprobados = definitivas.filter(n=>n>=3).length;
+  const reprobados = definitivas.filter(n=>n<3).length;
+  const promedio = definitivas.length ? (definitivas.reduce((a,b)=>a+b,0)/definitivas.length).toFixed(2) : "—";
+
+  const selectorOptions = opciones.map(x=>{
+    const componente = x.g.componente ? ` — ${x.g.componente==='Teorico'?'Teórico':'Práctico'}` : "";
+    const programa = programas.length>1 ? ` · ${x.programaNombre}` : "";
+    return `<option value="${x.g.id}" ${x.g.id===g.id?'selected':''}>${x.materia} — ${x.g.grupo}${componente}${programa}</option>`;
+  }).join("");
+
   document.getElementById("contenido").innerHTML=`
     <h2 class="panel-title">Notas y Actas — ${usuarioActual.nombre}</h2>
-    ${secciones || `<p style="color:#999">No tienes grupos con estudiantes matriculados este periodo.</p>`}
+
+    <div class="selector-materia-docente" style="margin:12px 0 18px;background:#f4f6f4;border-radius:10px;padding:14px">
+      <label for="selectorGrupoNotas" style="display:block;font-weight:bold;margin-bottom:7px">Selecciona la materia</label>
+      <select id="selectorGrupoNotas" style="width:100%;padding:10px;border:1px solid #cfd8d0;border-radius:8px;background:white;font-size:15px">
+        ${selectorOptions}
+      </select>
+      <p style="margin:7px 0 0;font-size:12px;color:#777">Solo se muestra una materia a la vez.</p>
+    </div>
+
+    <div class="tarjeta-grupo-notas">
+      <h3>${materia}${g.componente ? " ("+(g.componente==='Teorico'?'Teórico':'Práctico')+")" : ""} — ${g.grupo} ${actasSubidas ? '<span class="badge" style="background:#1e5631">Actas subidas</span>' : ""}</h3>
+      ${g.componente ? `<p style="font-size:12px;color:#666;margin:2px 0 10px 0">Esta es una materia Teórico/Práctico: la nota Definitiva del estudiante en su historial solo se publica cuando <b>ambos</b> componentes ya tengan actas subidas.</p>` : ""}
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0">
+        <div style="padding:8px 12px;background:#edf6ef;border-radius:8px"><b>${estudiantes.length}</b> estudiantes</div>
+        <div style="padding:8px 12px;background:#edf6ef;border-radius:8px"><b>${aprobados}</b> aprobados</div>
+        <div style="padding:8px 12px;background:#fff3e0;border-radius:8px"><b>${reprobados}</b> reprobados</div>
+        <div style="padding:8px 12px;background:#eef3f7;border-radius:8px">Promedio: <b>${promedio}</b></div>
+      </div>
+
+      <div style="margin:10px 0">
+        <b style="font-size:13px">Ítems de evaluación</b>
+        <span style="font-size:12px;color:${sumaPesos===100?'#1e5631':'#a83232'};font-weight:bold"> — suma actual: ${sumaPesos}%</span>
+        <div class="barra-suma-items"><div class="relleno" style="width:${Math.min(sumaPesos,100)}%;background:${colorBarra}"></div></div>
+        ${listaItems}
+      </div>
+
+      ${actasSubidas ? "" : `
+      <div id="avisoItems_${g.id}"></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;background:#f4f6f4;border-radius:8px;padding:10px">
+        <input id="item_nombre_${g.id}" placeholder="Ej: Taller 1" style="width:180px">
+        <input id="item_peso_${g.id}" type="number" min="1" max="100" placeholder="% (ej: 5)" style="width:110px">
+        <label style="font-size:12px;display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="item_asistencia_${g.id}"> Es el ítem de Asistencia (se calcula solo)
+        </label>
+        <button class="btn-secundario" style="width:auto;padding:8px 14px" onclick="agregarItemEvaluacion('${g.id}')">+ Agregar ítem</button>
+      </div>`}
+
+      <div style="margin:10px 0">
+        <label for="buscarEstudiante_${g.id}" style="font-size:13px;font-weight:bold">Buscar estudiante</label>
+        <input id="buscarEstudiante_${g.id}" type="search" placeholder="Nombre o código..." style="width:100%;max-width:360px;padding:9px;margin-top:5px;border:1px solid #ccd5ce;border-radius:8px">
+      </div>
+
+      <div style="overflow-x:auto">
+        <table class="tabla-notas-docente">
+          <tr><th>Código</th><th>Nombre</th>${encabezadoItems}<th>Definitiva</th><th>Estado</th></tr>
+          ${filas}
+        </table>
+      </div>
+
+      ${puedeSubirActas ? `<button onclick="subirActas('${programaNombre}','${g.id}','${materia.replace(/'/g,"\\'")}')">📤 Subir Actas</button>` : ""}
+      ${actasSubidas ? `<button class="btn-secundario" onclick="reabrirActas('${g.id}')">Reabrir Actas</button>` : ""}
+      ${(!actasSubidas && sumaPesos!==100) ? `<p style="font-size:12px;color:#999">El botón para subir actas aparece cuando los ítems sumen 100%.</p>` : ""}
+    </div>
   `;
+
+  const selector = document.getElementById("selectorGrupoNotas");
+  if(selector){
+    selector.addEventListener("change", function(){
+      grupoNotasDocenteSeleccionado = this.value;
+      renderNotasDocente();
+    });
+  }
+
+  const buscador = document.getElementById(`buscarEstudiante_${g.id}`);
+  if(buscador){
+    buscador.addEventListener("input", function(){
+      const termino = this.value.trim().toLowerCase();
+      document.querySelectorAll(`#contenido .fila-estudiante`).forEach(fila=>{
+        fila.style.display = !termino || fila.dataset.estudiante.includes(termino) ? "" : "none";
+      });
+    });
+  }
 }
 
 /* ======================================================================
