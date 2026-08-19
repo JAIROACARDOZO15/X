@@ -4519,95 +4519,1089 @@ function reabrirActas(grupoId){
 
 let grupoNotasDocenteSeleccionado = "";
 
-function renderNotasDocente(){
-  const programas=programasDelDocente(), gruposTodo=getGrupos(), configs=getConfigEvaluacion(), actas=getActas();
-  window.centroNotasDocente=window.centroNotasDocente||{programa:programas[0]||"",materia:"",grupoId:""};
-  const s=window.centroNotasDocente;
-  if(!programas.includes(s.programa)){s.programa=programas[0]||"";s.materia="";s.grupoId="";}
-  const gp=gruposTodo[s.programa]||{};
-  const materias=Object.keys(gp).filter(m=>(gp[m]||[]).some(g=>g.docente===usuarioActual.nombre));
-  if(!materias.includes(s.materia)){s.materia=materias[0]||"";s.grupoId="";}
-  const grupos=(gp[s.materia]||[]).filter(g=>g.docente===usuarioActual.nombre);
-  if(!grupos.some(g=>g.id===s.grupoId))s.grupoId=grupos.length===1?grupos[0].id:"";
-  const g=grupos.find(x=>x.id===s.grupoId);
-  if(g){renderPanelGrupoCentroNotas(s.programa,s.materia,g);return;}
+/* ================================================================
+   CENTRO DE CALIFICACIONES — DOCENTE
+   Navegación robusta: los botones usan acciones directas y además
+   quedan expuestas en window para que funcionen aunque el HTML sea
+   recreado dinámicamente.
+   ================================================================ */
+function estadoCentroNotas(){
+  if(!window.centroNotasDocente){
+    const programas = programasDelDocente();
+    window.centroNotasDocente = {
+      programa: programas[0] || "",
+      materia: "",
+      grupoId: ""
+    };
+  }
+  return window.centroNotasDocente;
+}
 
-  const cards=grupos.map(x=>{
-    const es=estudiantesDeGrupo(s.programa,s.materia,x.id), its=configs[x.id]||[], ns=getNotas();
-    let done=0; es.forEach(e=>{const n=((ns[x.id]||{})[e.codigo])||{},man=its.filter(i=>i.tipo!=="asistencia");if(man.length===0||man.every(i=>n[i.id]!==undefined&&n[i.id]!==""))done++;});
-    const pct=es.length?Math.round(done/es.length*100):0, acta=!!actas[x.id];
-    return `<button type="button" class="nc-group" data-grupo-id="${x.id}">
-      <div class="nc-group-top"><div><span class="nc-kicker">GRUPO</span><h3>${x.grupo||"-"}</h3><p>${x.componente?(x.componente==='Teorico'?'Teórico':'Práctico'):"Grupo regular"}</p></div><span class="nc-arrow">↗</span></div>
-      <div class="nc-group-meta"><span>👥 ${es.length} estudiantes</span><span>📊 ${pct}%</span></div>
-      <div class="nc-progress"><i style="width:${pct}%"></i></div>
-      <div class="nc-group-foot"><span>${x.horario||"Horario no registrado"}</span>${acta?'<b class="nc-chip ok">✓ Acta subida</b>':'<b class="nc-chip">● Abierto</b>'}</div>
-    </button>`;
+function cambiarProgramaCentroNotas(programa){
+  const s = estadoCentroNotas();
+  s.programa = programa || "";
+  s.materia = "";
+  s.grupoId = "";
+  renderNotasDocente();
+}
+
+function cambiarMateriaCentroNotas(materia){
+  const s = estadoCentroNotas();
+  s.materia = materia || "";
+  s.grupoId = "";
+  renderNotasDocente();
+}
+
+function abrirGrupoCentroNotas(grupoId){
+  const s = estadoCentroNotas();
+  s.grupoId = grupoId || "";
+  renderNotasDocente();
+}
+
+function volverGruposCentroNotas(){
+  const s = estadoCentroNotas();
+  s.grupoId = "";
+  renderNotasDocente();
+}
+
+/* Compatibilidad explícita con onclick y con navegadores que recrean el DOM. */
+window.cambiarProgramaCentroNotas = cambiarProgramaCentroNotas;
+window.cambiarMateriaCentroNotas = cambiarMateriaCentroNotas;
+window.abrirGrupoCentroNotas = abrirGrupoCentroNotas;
+window.volverGruposCentroNotas = volverGruposCentroNotas;
+
+function renderNotasDocente(){
+  const programas = programasDelDocente();
+  const gruposTodo = getGrupos();
+  const configs = getConfigEvaluacion();
+  const actas = getActas();
+  const s = estadoCentroNotas();
+
+  if(!programas.includes(s.programa)){
+    s.programa = programas[0] || "";
+    s.materia = "";
+    s.grupoId = "";
+  }
+
+  const gp = gruposTodo[s.programa] || {};
+  const materias = Object.keys(gp).filter(m =>
+    (gp[m] || []).some(g => g.docente === usuarioActual.nombre)
+  );
+
+  if(!materias.includes(s.materia)){
+    s.materia = materias[0] || "";
+    s.grupoId = "";
+  }
+
+  const grupos = (gp[s.materia] || []).filter(
+    g => g.docente === usuarioActual.nombre
+  );
+
+  if(!grupos.some(g => g.id === s.grupoId)){
+    s.grupoId = grupos.length === 1 ? grupos[0].id : "";
+  }
+
+  const g = grupos.find(x => x.id === s.grupoId);
+
+  if(g){
+    renderPanelGrupoCentroNotas(s.programa, s.materia, g);
+    return;
+  }
+
+  const cards = grupos.map(x => {
+    const es = estudiantesDeGrupo(s.programa, s.materia, x.id);
+    const its = configs[x.id] || [];
+    const ns = getNotas();
+
+    let done = 0;
+    es.forEach(e => {
+      const n = ((ns[x.id] || {})[e.codigo]) || {};
+      const manuales = its.filter(i => i.tipo !== "asistencia");
+      if(manuales.length === 0 ||
+         manuales.every(i => n[i.id] !== undefined && n[i.id] !== "")){
+        done++;
+      }
+    });
+
+    const pct = es.length ? Math.round(done / es.length * 100) : 0;
+    const acta = !!actas[x.id];
+    const componente = x.componente
+      ? (x.componente === "Teorico" ? "Teórico" : "Práctico")
+      : "Grupo regular";
+
+    return `
+      <button type="button"
+              class="nc-group"
+              onclick="abrirGrupoCentroNotas('${escAttr(x.id)}')"
+              aria-label="Abrir grupo ${escAttr(x.grupo || "-")}">
+        <div class="nc-group-top">
+          <div>
+            <span class="nc-kicker">GRUPO</span>
+            <h3>${x.grupo || "-"}</h3>
+            <p>${componente}</p>
+          </div>
+          <span class="nc-arrow">→</span>
+        </div>
+
+        <div class="nc-group-meta">
+          <span>👥 ${es.length} estudiantes</span>
+          <span>📊 ${pct}%</span>
+        </div>
+
+        <div class="nc-progress"><i style="width:${pct}%"></i></div>
+
+        <div class="nc-group-foot">
+          <span>${x.horario || "Horario no registrado"}</span>
+          ${acta
+            ? '<b class="nc-chip ok">✓ Acta subida</b>'
+            : '<b class="nc-chip">● En edición</b>'}
+        </div>
+      </button>`;
+  }).join("");
+
+  document.getElementById("contenido").innerHTML = `
+    <style>${estilosCentroNotas()}</style>
+
+    <div class="nc-shell">
+      <section class="nc-hero">
+        <div class="nc-hero-copy">
+          <span class="nc-eyebrow">PANEL DOCENTE · CALIFICACIONES</span>
+          <h1>Centro de calificaciones</h1>
+          <p>Selecciona la materia y después el grupo que quieres administrar.</p>
+        </div>
+
+        <div class="nc-select-grid">
+          <label>
+            <span>Programa académico</span>
+            <select id="ncPrograma">
+              ${programas.map(p => `
+                <option value="${escAttr(p)}" ${p === s.programa ? "selected" : ""}>
+                  ${p}
+                </option>`).join("")}
+            </select>
+          </label>
+
+          <label>
+            <span>Materia</span>
+            <select id="ncMateria">
+              ${materias.map(m => `
+                <option value="${escAttr(m)}" ${m === s.materia ? "selected" : ""}>
+                  ${m} · ${(gp[m] || []).filter(x => x.docente === usuarioActual.nombre).length} grupo(s)
+                </option>`).join("")}
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="nc-section-head">
+        <div>
+          <span class="nc-eyebrow">MIS GRUPOS</span>
+          <h2>${s.materia || "Mis materias"}</h2>
+          <p>${grupos.length} grupo(s) disponibles para este docente.</p>
+        </div>
+      </section>
+
+      <div class="nc-grid">
+        ${cards || `
+          <div class="nc-empty">
+            <div class="nc-empty-icon">📚</div>
+            <h3>No hay grupos disponibles</h3>
+            <p>Selecciona otra materia o verifica que el grupo esté asignado a este docente.</p>
+          </div>`}
+      </div>
+    </div>`;
+
+  document.getElementById("ncPrograma")?.addEventListener(
+    "change",
+    e => cambiarProgramaCentroNotas(e.target.value)
+  );
+
+  document.getElementById("ncMateria")?.addEventListener(
+    "change",
+    e => cambiarMateriaCentroNotas(e.target.value)
+  );
+}
+
+function estilosCentroNotas(){ return `
+  .nc-shell{
+    max-width:1280px;
+    margin:0 auto;
+    padding:6px 0 48px;
+    color:#182230
+  }
+
+  .nc-hero{
+    background:linear-gradient(135deg,#10351f 0%,#1e5631 55%,#2f7b47 100%);
+    color:#fff;
+    border-radius:24px;
+    padding:30px;
+    box-shadow:0 16px 38px rgba(18,61,37,.18);
+    margin-bottom:22px
+  }
+
+  .nc-hero-copy h1{
+    font-size:32px;
+    margin:5px 0 7px;
+    letter-spacing:-.7px
+  }
+
+  .nc-hero-copy p{
+    margin:0;
+    color:#dbece0
+  }
+
+  .nc-eyebrow{
+    font-size:10px;
+    letter-spacing:.13em;
+    font-weight:900;
+    color:#76b887
+  }
+
+  .nc-hero .nc-eyebrow{color:#b8e2c2}
+
+  .nc-select-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+    margin-top:24px
+  }
+
+  .nc-select-grid label{display:block}
+
+  .nc-select-grid label>span{
+    display:block;
+    font-size:11px;
+    font-weight:800;
+    margin-bottom:7px;
+    color:#dcefe1
+  }
+
+  .nc-select-grid select{
+    width:100%;
+    padding:13px 15px;
+    border:1px solid rgba(255,255,255,.25);
+    border-radius:12px;
+    background:rgba(255,255,255,.10);
+    color:#fff;
+    font-weight:700;
+    outline:none;
+    box-sizing:border-box
+  }
+
+  .nc-select-grid select option{
+    color:#182230;
+    background:#fff
+  }
+
+  .nc-section-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:end;
+    margin:0 2px 13px
+  }
+
+  .nc-section-head h2{
+    margin:4px 0 2px;
+    font-size:22px
+  }
+
+  .nc-section-head p{
+    margin:0;
+    color:#667085;
+    font-size:13px
+  }
+
+  .nc-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(290px,1fr));
+    gap:15px
+  }
+
+  .nc-group{
+    appearance:none;
+    width:100%;
+    text-align:left;
+    background:#fff;
+    border:1px solid #e1e7e3;
+    border-radius:18px;
+    padding:19px;
+    cursor:pointer;
+    transition:.2s;
+    box-shadow:0 3px 12px rgba(16,24,40,.04);
+    font-family:inherit;
+    color:#182230
+  }
+
+  .nc-group:hover{
+    transform:translateY(-3px);
+    border-color:#2b7041;
+    box-shadow:0 14px 30px rgba(16,24,40,.08)
+  }
+
+  .nc-group:focus-visible{
+    outline:3px solid rgba(30,86,49,.25);
+    outline-offset:2px
+  }
+
+  .nc-group-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start
+  }
+
+  .nc-kicker{
+    font-size:9px;
+    letter-spacing:.12em;
+    font-weight:900;
+    color:#1e5631
+  }
+
+  .nc-group h3{
+    font-size:24px;
+    margin:4px 0 0
+  }
+
+  .nc-group p{
+    margin:2px 0 0;
+    color:#667085;
+    font-size:12px
+  }
+
+  .nc-arrow{
+    width:35px;
+    height:35px;
+    border-radius:50%;
+    background:#eef7f0;
+    color:#1e5631;
+    display:grid;
+    place-items:center;
+    font-size:20px
+  }
+
+  .nc-group-meta{
+    display:flex;
+    justify-content:space-between;
+    margin:20px 0 8px;
+    font-size:12px;
+    color:#475467
+  }
+
+  .nc-progress{
+    height:8px;
+    background:#edf1ee;
+    border-radius:20px;
+    overflow:hidden
+  }
+
+  .nc-progress i{
+    display:block;
+    height:100%;
+    background:linear-gradient(90deg,#2b7041,#75ad83);
+    border-radius:20px
+  }
+
+  .nc-group-foot{
+    display:flex;
+    justify-content:space-between;
+    gap:8px;
+    margin-top:14px;
+    font-size:10px;
+    color:#667085;
+    align-items:center
+  }
+
+  .nc-chip{
+    padding:5px 8px;
+    border-radius:999px;
+    background:#fff5df;
+    color:#8a5a00;
+    white-space:nowrap
+  }
+
+  .nc-chip.ok{
+    background:#eaf7ea;
+    color:#1e5631
+  }
+
+  .nc-empty{
+    background:#fff;
+    border:1px dashed #cfd8d2;
+    border-radius:18px;
+    padding:35px;
+    text-align:center;
+    color:#667085;
+    grid-column:1/-1
+  }
+
+  .nc-empty-icon{font-size:34px}
+  .nc-empty h3{color:#344054;margin:8px 0 5px}
+  .nc-empty p{margin:0;font-size:13px}
+
+  /* ---------- PANEL DEL GRUPO ---------- */
+
+  .nc-panel{
+    max-width:1280px;
+    margin:0 auto;
+    padding-bottom:48px
+  }
+
+  .nc-breadcrumb{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    margin:0 0 14px;
+    font-size:12px;
+    color:#667085
+  }
+
+  .nc-link{
+    border:0;
+    background:transparent;
+    color:#1e5631;
+    font-weight:900;
+    cursor:pointer;
+    padding:6px 0;
+    width:auto
+  }
+
+  .nc-head{
+    display:flex;
+    justify-content:space-between;
+    gap:18px;
+    align-items:flex-start;
+    background:#fff;
+    border:1px solid #e1e7e3;
+    border-radius:20px;
+    padding:21px;
+    box-shadow:0 4px 15px rgba(16,24,40,.04)
+  }
+
+  .nc-head h1{
+    margin:2px 0 5px;
+    font-size:27px
+  }
+
+  .nc-head p{
+    margin:0;
+    color:#667085;
+    font-size:12px
+  }
+
+  .nc-actions{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    justify-content:flex-end
+  }
+
+  .nc-btn{
+    border:1px solid #d0d5dd;
+    background:#fff;
+    border-radius:10px;
+    padding:10px 14px;
+    font-weight:800;
+    cursor:pointer;
+    color:#344054;
+    width:auto;
+    margin:0
+  }
+
+  .nc-btn:hover{
+    border-color:#1e5631;
+    color:#1e5631;
+    background:#f8fbf8
+  }
+
+  .nc-btn.primary{
+    background:#1e5631;
+    color:#fff;
+    border-color:#1e5631
+  }
+
+  .nc-btn.primary:hover{
+    background:#164526;
+    color:#fff
+  }
+
+  /* Las estadísticas ahora ocupan todo el ancho. */
+  .nc-stats{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:11px;
+    margin:14px 0
+  }
+
+  .nc-stat{
+    background:#fff;
+    border:1px solid #e1e7e3;
+    border-radius:15px;
+    padding:15px
+  }
+
+  .nc-stat span{
+    display:block;
+    font-size:9px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    font-weight:900;
+    color:#667085
+  }
+
+  .nc-stat b{
+    font-size:25px;
+    display:block;
+    margin-top:5px
+  }
+
+  .nc-stat.green b{color:#1e5631}
+  .nc-stat.red b{color:#b42318}
+  .nc-stat.gold b{color:#9a6700}
+
+  /* Configuración a lo largo de toda la pantalla. */
+  .nc-config-wide{
+    background:#fff;
+    border:1px solid #e1e7e3;
+    border-radius:18px;
+    padding:18px;
+    box-shadow:0 3px 12px rgba(16,24,40,.04);
+    margin-bottom:14px
+  }
+
+  .nc-config-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    margin-bottom:14px
+  }
+
+  .nc-config-header h3{
+    margin:0;
+    font-size:16px
+  }
+
+  .nc-config-list{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+    gap:9px
+  }
+
+  .nc-config-row{
+    display:grid;
+    grid-template-columns:1fr auto auto;
+    gap:8px;
+    align-items:center;
+    padding:11px;
+    border:1px solid #edf0ee;
+    border-radius:10px;
+    background:#fbfdfb
+  }
+
+  .nc-config-row b{font-size:12px}
+
+  .nc-delete{
+    border:0;
+    background:#fff0ef;
+    color:#b42318;
+    border-radius:8px;
+    padding:5px 7px;
+    cursor:pointer;
+    width:auto;
+    margin:0
+  }
+
+  .nc-total{
+    display:flex;
+    justify-content:space-between;
+    padding:12px 14px;
+    background:#f5f8f5;
+    border-radius:11px;
+    margin-top:12px;
+    font-weight:900
+  }
+
+  .nc-form{
+    margin-top:14px;
+    padding-top:14px;
+    border-top:1px solid #edf0ee
+  }
+
+  .nc-form-layout{
+    display:grid;
+    grid-template-columns:1.4fr .7fr auto;
+    gap:9px;
+    align-items:end;
+    margin-top:9px
+  }
+
+  .nc-form input{
+    width:100%;
+    box-sizing:border-box;
+    padding:10px;
+    border:1px solid #d0d5dd;
+    border-radius:9px;
+    margin:0
+  }
+
+  .nc-check{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-size:11px;
+    color:#475467;
+    margin:10px 0 0
+  }
+
+  .nc-check input{
+    width:auto;
+    margin:0
+  }
+
+  .nc-alert{
+    padding:9px;
+    border-radius:10px;
+    font-size:11px;
+    margin-top:10px
+  }
+
+  .nc-alert.ok{background:#eaf7ea;color:#1e5631}
+  .nc-alert.warn{background:#fff4df;color:#8a5a00}
+  .nc-alert.bad{background:#fdecea;color:#b42318}
+
+  /* Tabla de calificaciones debajo de la configuración. */
+  .nc-table-card{
+    background:#fff;
+    border:1px solid #e1e7e3;
+    border-radius:18px;
+    padding:17px;
+    box-shadow:0 3px 12px rgba(16,24,40,.04);
+    overflow:hidden
+  }
+
+  .nc-toolbar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+    padding-bottom:13px
+  }
+
+  .nc-toolbar h3{margin:0;font-size:16px}
+
+  .nc-search{
+    width:250px;
+    max-width:100%;
+    padding:10px 12px;
+    border:1px solid #d0d5dd;
+    border-radius:10px;
+    box-sizing:border-box
+  }
+
+  .nc-table-wrap{
+    overflow:auto;
+    max-height:610px
+  }
+
+  .nc-table{
+    width:100%;
+    border-collapse:separate;
+    border-spacing:0;
+    min-width:700px
+  }
+
+  .nc-table th{
+    position:sticky;
+    top:0;
+    background:#f7f9f7;
+    z-index:2;
+    padding:11px 9px;
+    text-align:left;
+    font-size:10px;
+    color:#475467;
+    border-bottom:1px solid #dfe5e1
+  }
+
+  .nc-table td{
+    padding:9px;
+    border-bottom:1px solid #eef1ef;
+    font-size:12px
+  }
+
+  .nc-table tr:hover td{background:#fbfdfb}
+
+  .nc-student{font-weight:800}
+  .nc-code{display:block;color:#667085;font-size:10px;margin-top:2px}
+
+  .nc-input{
+    width:64px;
+    padding:9px 7px;
+    border:1px solid #cfd8d2;
+    border-radius:9px;
+    text-align:center;
+    font-weight:800;
+    box-sizing:border-box
+  }
+
+  .nc-input:focus{
+    outline:3px solid rgba(30,86,49,.12);
+    border-color:#1e5631
+  }
+
+  .nc-def{font-size:15px;font-weight:900}
+
+  .nc-status{
+    display:inline-block;
+    padding:5px 8px;
+    border-radius:999px;
+    font-size:9px;
+    font-weight:900
+  }
+
+  .nc-ok{background:#eaf7ea;color:#1e5631}
+  .nc-bad{background:#fdecea;color:#b42318}
+  .nc-warn{background:#fff4df;color:#8a5a00}
+
+  .nc-acta{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    padding-top:13px
+  }
+
+  .nc-bar{
+    height:7px;
+    background:#edf1ee;
+    border-radius:20px;
+    overflow:hidden;
+    margin-top:6px;
+    min-width:180px
+  }
+
+  .nc-bar i{
+    display:block;
+    height:100%;
+    background:linear-gradient(90deg,#2b7041,#75ad83)
+  }
+
+  .nc-note{font-size:11px;color:#667085}
+  .nc-save{font-size:9px;color:#1e5631;margin-left:3px}
+
+  @media(max-width:900px){
+    .nc-select-grid{grid-template-columns:1fr}
+    .nc-stats{grid-template-columns:1fr 1fr}
+    .nc-head{flex-direction:column}
+    .nc-actions{width:100%;justify-content:stretch}
+    .nc-btn{flex:1}
+    .nc-form-layout{grid-template-columns:1fr}
+    .nc-toolbar{align-items:stretch;flex-direction:column}
+    .nc-search{width:100%}
+    .nc-acta{flex-direction:column;align-items:stretch}
+  }
+
+  @media(max-width:600px){
+    .nc-hero{padding:21px;border-radius:18px}
+    .nc-hero-copy h1{font-size:26px}
+    .nc-stats{grid-template-columns:1fr 1fr}
+    .nc-config-list{grid-template-columns:1fr}
+    .nc-group-foot{align-items:flex-start;flex-direction:column}
+  }
+`;}
+
+/* Panel de un grupo concreto. */
+function renderPanelGrupoCentroNotas(programa,materia,g){
+  const es = estudiantesDeGrupo(programa,materia,g.id);
+  const its = getConfigEvaluacion()[g.id] || [];
+  const ns = getNotas();
+  const acta = !!getActas()[g.id];
+
+  const peso = its.reduce((a,i)=>a+(parseFloat(i.peso)||0),0);
+
+  let complete=0, ap=0, rep=0, pend=0, sum=0, cnt=0;
+
+  es.forEach(e=>{
+    const n=((ns[g.id]||{})[e.codigo])||{};
+    const manuales=its.filter(i=>i.tipo!=="asistencia");
+
+    if(manuellesCompletos(manuales,n)) complete++;
+    else pend++;
+
+    const d=parseFloat(calcularDefinitivaGrupo(g.id,e.codigo));
+    if(!isNaN(d)){
+      cnt++;
+      sum+=d;
+      if(d>=3) ap++;
+      else rep++;
+    }
+  });
+
+  const promedio=cnt?(sum/cnt).toFixed(2):"—";
+  const pct=es.length?Math.round(complete/es.length*100):0;
+  const puede=peso===100 && es.length && !acta;
+
+  const filas=es.map(e=>{
+    const n=((ns[g.id]||{})[e.codigo])||{};
+    const d=parseFloat(calcularDefinitivaGrupo(g.id,e.codigo));
+    const st=isNaN(d)?"Pendiente":d>=3?"Aprobada":"Reprobada";
+    const cl=st==="Aprobada"?"nc-ok":st==="Reprobada"?"nc-bad":"nc-warn";
+
+    const celdas=its.map(i=>{
+      if(i.tipo==="asistencia"){
+        const v=calcularNotaAsistencia(g.id,e.codigo);
+        return `<td><b>${v===null?"—":v.toFixed(1)}</b><br><span class="nc-note">automática</span></td>`;
+      }
+
+      const v=n[i.id];
+
+      return `<td>
+        <input class="nc-input"
+          type="number" min="0" max="5" step="0.1"
+          value="${v!==undefined?v:""}"
+          ${acta?"disabled":""}
+          onchange="guardarNotaItem('${escAttr(g.id)}','${escAttr(e.codigo)}','${escAttr(i.id)}',this.value);marcarGuardadoNotaPro(this)"
+          onkeydown="navegarNotaPro(event,this)">
+        <span class="nc-save"></span>
+      </td>`;
+    }).join("");
+
+    return `<tr class="nc-student-row">
+      <td>
+        <span class="nc-student">${e.nombre}</span>
+        <span class="nc-code">${e.codigo}</span>
+      </td>
+      ${celdas}
+      <td class="nc-def">${isNaN(d)?"—":d.toFixed(1)}</td>
+      <td><span class="nc-status ${cl}">${st}</span></td>
+    </tr>`;
   }).join("");
 
   document.getElementById("contenido").innerHTML=`
     <style>${estilosCentroNotas()}</style>
-    <div class="nc-shell">
-      <div class="nc-hero">
-        <div class="nc-hero-copy"><span class="nc-eyebrow">PANEL DOCENTE · CALIFICACIONES</span><h1>Centro de calificaciones</h1><p>Selecciona una materia y trabaja cada grupo de forma independiente.</p></div>
-        <div class="nc-select-grid">
-          <label><span>Programa</span><select id="ncPrograma">${programas.map(p=>`<option value="${escAttr(p)}" ${p===s.programa?'selected':''}>${p}</option>`).join("")}</select></label>
-          <label><span>Materia</span><select id="ncMateria">${materias.map(m=>`<option value="${escAttr(m)}" ${m===s.materia?'selected':''}>${m} · ${(gp[m]||[]).filter(x=>x.docente===usuarioActual.nombre).length} grupo(s)</option>`).join("")}</select></label>
+
+    <div class="nc-panel">
+
+      <div class="nc-breadcrumb">
+        <button type="button" class="nc-link" onclick="volverGruposCentroNotas()">
+          ← Mis grupos
+        </button>
+        <span>›</span>
+        <span>${materia}</span>
+        <span>›</span>
+        <b>Grupo ${g.grupo||"-"}</b>
+      </div>
+
+      <section class="nc-head">
+        <div>
+          <span class="nc-eyebrow">GRUPO ${g.grupo||"-"}</span>
+          <h1>${materia}</h1>
+          <p>
+            ${g.componente
+              ? (g.componente==="Teorico"?"Componente Teórico":"Componente Práctico")+" · "
+              : ""}
+            ${es.length} estudiantes
+          </p>
+        </div>
+
+        <div class="nc-actions">
+          <button type="button" class="nc-btn" onclick="volverGruposCentroNotas()">
+            ← Cambiar grupo
+          </button>
+
+          ${acta
+            ? `<button type="button" class="nc-btn" onclick="reabrirActas('${escAttr(g.id)}')">
+                 ↺ Reabrir acta
+               </button>`
+            : (puede
+              ? `<button type="button" class="nc-btn primary" onclick="subirActas('${escAttr(programa)}','${escAttr(g.id)}','${escAttr(materia)}')">
+                   🔒 Cerrar y publicar acta
+                 </button>`
+              : "")}
+        </div>
+      </section>
+
+      <div class="nc-stats">
+        <div class="nc-stat">
+          <span>Estudiantes</span><b>${es.length}</b>
+        </div>
+        <div class="nc-stat green">
+          <span>Aprobados</span><b>${ap}</b>
+        </div>
+        <div class="nc-stat gold">
+          <span>Pendientes</span><b>${pend}</b>
+        </div>
+        <div class="nc-stat">
+          <span>Promedio</span><b>${promedio}</b>
         </div>
       </div>
-      <div class="nc-section-head"><div><span class="nc-eyebrow">MIS GRUPOS</span><h2>${s.materia||"Mis materias"}</h2><p>${grupos.length} grupo(s) disponibles</p></div></div>
-      <div class="nc-grid">${cards||'<div class="nc-empty">No hay grupos disponibles para esta materia.</div>'}</div>
+
+      <!-- CONFIGURACIÓN A TODO LO ANCHO -->
+      <section class="nc-config-wide">
+        <div class="nc-config-header">
+          <div>
+            <h3>⚙️ Configuración de evaluación</h3>
+            <span class="nc-note">
+              ${acta
+                ? "El acta está cerrada. Reábrela para modificar la configuración."
+                : "Define los porcentajes antes de capturar las calificaciones."}
+            </span>
+          </div>
+          <b>${peso}% / 100%</b>
+        </div>
+
+        <div class="nc-config-list">
+          ${its.length
+            ? its.map(i=>`
+              <div class="nc-config-row">
+                <span>${i.tipo==="asistencia"?"✅ ":""}${i.nombre}</span>
+                <b>${i.peso}%</b>
+                ${acta
+                  ? ""
+                  : `<button type="button"
+                       class="nc-delete"
+                       onclick="eliminarItemEvaluacion('${escAttr(g.id)}','${escAttr(i.id)}')"
+                       title="Eliminar">×</button>`}
+              </div>`).join("")
+            : `<div class="nc-empty" style="grid-column:1/-1;padding:20px">
+                 Aún no hay evaluaciones configuradas.
+               </div>`}
+        </div>
+
+        <div class="nc-total">
+          <span>Ponderación total</span>
+          <span>${peso}%</span>
+        </div>
+
+        <div class="nc-alert ${peso===100?"ok":peso>100?"bad":"warn"}">
+          ${peso===100
+            ? "✓ La ponderación está completa. Ya puedes registrar y publicar las notas."
+            : peso>100
+              ? "⚠ La ponderación supera el 100%."
+              : `⚠ Faltan ${Math.max(0,100-peso)}% para completar la evaluación.`}
+        </div>
+
+        ${acta
+          ? `<div class="nc-alert warn">
+               🔒 Configuración bloqueada porque el acta está publicada.
+               Usa <b>Reabrir acta</b> arriba para editarla.
+             </div>`
+          : `
+            <div class="nc-form">
+              <b style="font-size:12px">Agregar evaluación</b>
+
+              <div class="nc-form-layout">
+                <input id="item_nombre_${escAttr(g.id)}"
+                       placeholder="Ej. Parcial 1">
+
+                <input id="item_peso_${escAttr(g.id)}"
+                       type="number" min="1" max="100" step="1"
+                       placeholder="Porcentaje">
+
+                <button type="button"
+                        class="nc-btn primary"
+                        onclick="agregarItemEvaluacion('${escAttr(g.id)}')">
+                  + Agregar evaluación
+                </button>
+              </div>
+
+              <label class="nc-check">
+                <input id="item_asistencia_${escAttr(g.id)}" type="checkbox">
+                Es el ítem de asistencia (se calcula automáticamente)
+              </label>
+
+              <div id="avisoItems_${escAttr(g.id)}"></div>
+            </div>`}
+      </section>
+
+      <!-- REGISTRO DE CALIFICACIONES -->
+      <section class="nc-table-card">
+        <div class="nc-toolbar">
+          <div>
+            <h3>⚡ Registro de calificaciones</h3>
+            <span class="nc-note">Escribe la nota · Enter/Tab avanza.</span>
+          </div>
+
+          <input id="ncSearch"
+                 class="nc-search"
+                 placeholder="🔎 Buscar estudiante o código">
+        </div>
+
+        <div class="nc-table-wrap">
+          <table class="nc-table">
+            <thead>
+              <tr>
+                <th>Estudiante</th>
+                ${its.map(i=>`
+                  <th>
+                    ${i.tipo==="asistencia"?"✅ ":""}${i.nombre}
+                    <br><span class="nc-note">${i.peso}%</span>
+                  </th>`).join("")}
+                <th>Definitiva</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyNotasPro">${filas}</tbody>
+          </table>
+        </div>
+
+        <div class="nc-acta">
+          <div>
+            <b>${complete}/${es.length}</b> completos
+            <div class="nc-bar"><i style="width:${pct}%"></i></div>
+          </div>
+
+          <div>
+            ${puede
+              ? `<button type="button"
+                         class="nc-btn primary"
+                         onclick="subirActas('${escAttr(programa)}','${escAttr(g.id)}','${escAttr(materia)}')">
+                   📤 Publicar acta oficial
+                 </button>`
+              : acta
+                ? '<b style="font-size:11px;color:#1e5631">✓ Acta oficial subida</b>'
+                : '<span class="nc-note">Completa las notas y la ponderación para cerrar.</span>'}
+          </div>
+        </div>
+      </section>
+
     </div>`;
 
-  document.getElementById("ncPrograma")?.addEventListener("change",e=>cambiarProgramaCentroNotas(e.target.value));
-  document.getElementById("ncMateria")?.addEventListener("change",e=>cambiarMateriaCentroNotas(e.target.value));
-  document.querySelectorAll(".nc-group").forEach(btn=>btn.addEventListener("click",()=>abrirGrupoCentroNotas(btn.dataset.grupoId)));
+  document.getElementById("ncSearch")?.addEventListener(
+    "input",
+    e => filtrarEstudiantesNotasPro(e.target.value)
+  );
 }
 
-function estilosCentroNotas(){return `
-  .nc-shell{max-width:1220px;margin:0 auto;padding:8px 0 40px;color:#182230}.nc-hero{background:linear-gradient(135deg,#123d25 0%,#1e5631 58%,#2b7041 100%);color:#fff;border-radius:24px;padding:28px;box-shadow:0 14px 35px #123d2524;margin-bottom:22px}.nc-hero-copy h1{font-size:32px;margin:5px 0 7px;letter-spacing:-.7px}.nc-hero-copy p{margin:0;color:#dbece0}.nc-eyebrow{font-size:10px;letter-spacing:.13em;font-weight:900;color:#76b887}.nc-hero .nc-eyebrow{color:#b8e2c2}.nc-select-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:24px}.nc-select-grid label{display:block}.nc-select-grid label>span{display:block;font-size:11px;font-weight:800;margin-bottom:7px;color:#dcefe1}.nc-select-grid select{width:100%;padding:13px 15px;border:1px solid #ffffff3d;border-radius:12px;background:#ffffff12;color:#fff;font-weight:700;outline:none}.nc-select-grid select option{color:#182230;background:#fff}.nc-section-head{display:flex;justify-content:space-between;align-items:end;margin:0 2px 13px}.nc-section-head h2{margin:4px 0 2px;font-size:22px}.nc-section-head p{margin:0;color:#667085;font-size:13px}.nc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:15px}.nc-group{appearance:none;width:100%;text-align:left;background:#fff;border:1px solid #e1e7e3;border-radius:18px;padding:19px;cursor:pointer;transition:.2s;box-shadow:0 3px 12px #10182808}.nc-group:hover{transform:translateY(-3px);border-color:#2b7041;box-shadow:0 14px 30px #10182812}.nc-group-top{display:flex;justify-content:space-between;align-items:flex-start}.nc-kicker{font-size:9px;letter-spacing:.12em;font-weight:900;color:#1e5631}.nc-group h3{font-size:24px;margin:4px 0 0}.nc-group p{margin:2px 0 0;color:#667085;font-size:12px}.nc-arrow{width:35px;height:35px;border-radius:50%;background:#eef7f0;color:#1e5631;display:grid;place-items:center;font-size:20px}.nc-group-meta{display:flex;justify-content:space-between;margin:20px 0 8px;font-size:12px;color:#475467}.nc-progress{height:8px;background:#edf1ee;border-radius:20px;overflow:hidden}.nc-progress i{display:block;height:100%;background:linear-gradient(90deg,#2b7041,#75ad83);border-radius:20px}.nc-group-foot{display:flex;justify-content:space-between;gap:8px;margin-top:14px;font-size:10px;color:#667085}.nc-chip{padding:5px 8px;border-radius:999px;background:#fff5df;color:#8a5a00}.nc-chip.ok{background:#eaf7ea;color:#1e5631}.nc-empty{background:#fff;border:1px dashed #cfd8d2;border-radius:18px;padding:30px;text-align:center;color:#667085}
-  .nc-panel{max-width:1220px;margin:0 auto}.nc-breadcrumb{display:flex;gap:8px;align-items:center;margin:0 0 14px;font-size:12px;color:#667085}.nc-link{border:0;background:transparent;color:#1e5631;font-weight:900;cursor:pointer;padding:0}.nc-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;background:#fff;border:1px solid #e1e7e3;border-radius:20px;padding:21px;box-shadow:0 4px 15px #10182807}.nc-head h1{margin:2px 0 5px;font-size:27px}.nc-head p{margin:0;color:#667085;font-size:12px}.nc-actions{display:flex;gap:8px;flex-wrap:wrap}.nc-btn{border:1px solid #d0d5dd;background:#fff;border-radius:10px;padding:10px 14px;font-weight:800;cursor:pointer;color:#344054}.nc-btn:hover{border-color:#1e5631;color:#1e5631}.nc-btn.primary{background:#1e5631;color:#fff;border-color:#1e5631}.nc-btn.primary:hover{background:#164526;color:#fff}.nc-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin:14px 0}.nc-stat{background:#fff;border:1px solid #e1e7e3;border-radius:15px;padding:15px}.nc-stat span{display:block;font-size:9px;text-transform:uppercase;letter-spacing:.08em;font-weight:900;color:#667085}.nc-stat b{font-size:25px;display:block;margin-top:5px}.nc-stat.green b{color:#1e5631}.nc-stat.red b{color:#b42318}.nc-stat.gold b{color:#9a6700}.nc-main-grid{display:grid;grid-template-columns:330px 1fr;gap:14px}.nc-card{background:#fff;border:1px solid #e1e7e3;border-radius:18px;padding:17px;box-shadow:0 3px 12px #10182806}.nc-card-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.nc-card-title h3{margin:0;font-size:15px}.nc-config-list{display:flex;flex-direction:column;gap:8px}.nc-config-row{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:10px;border:1px solid #edf0ee;border-radius:10px}.nc-config-row b{font-size:12px}.nc-delete{border:0;background:#fff0ef;color:#b42318;border-radius:8px;padding:5px 7px;cursor:pointer}.nc-total{display:flex;justify-content:space-between;padding:12px;background:#f5f8f5;border-radius:11px;margin-top:10px;font-weight:900}.nc-form{border-top:1px solid #edf0ee;margin-top:13px;padding-top:14px}.nc-form input{width:100%;box-sizing:border-box;padding:10px;border:1px solid #d0d5dd;border-radius:9px;margin-bottom:8px}.nc-form-line{display:grid;grid-template-columns:1fr auto;gap:8px}.nc-check{display:flex;align-items:center;gap:6px;font-size:11px;color:#475467;margin:4px 0 10px}.nc-check input{width:auto;margin:0}.nc-table-card{overflow:hidden}.nc-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;padding-bottom:13px}.nc-toolbar h3{margin:0;font-size:16px}.nc-search{width:250px;max-width:100%;padding:10px 12px;border:1px solid #d0d5dd;border-radius:10px}.nc-table-wrap{overflow:auto;max-height:610px}.nc-table{width:100%;border-collapse:separate;border-spacing:0;min-width:700px}.nc-table th{position:sticky;top:0;background:#f7f9f7;z-index:2;padding:11px 9px;text-align:left;font-size:10px;color:#475467;border-bottom:1px solid #dfe5e1}.nc-table td{padding:9px;border-bottom:1px solid #eef1ef;font-size:12px}.nc-table tr:hover td{background:#fbfdfb}.nc-student{font-weight:800}.nc-code{display:block;color:#667085;font-size:10px;margin-top:2px}.nc-input{width:64px;padding:9px 7px;border:1px solid #cfd8d2;border-radius:9px;text-align:center;font-weight:800}.nc-input:focus{outline:3px solid #1e563125;border-color:#1e5631}.nc-def{font-size:15px;font-weight:900}.nc-status{display:inline-block;padding:5px 8px;border-radius:999px;font-size:9px;font-weight:900}.nc-ok{background:#eaf7ea;color:#1e5631}.nc-bad{background:#fdecea;color:#b42318}.nc-warn{background:#fff4df;color:#8a5a00}.nc-acta{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-top:13px}.nc-bar{height:7px;background:#edf1ee;border-radius:20px;overflow:hidden;margin-top:6px}.nc-bar i{display:block;height:100%;background:linear-gradient(90deg,#2b7041,#75ad83)}.nc-note{font-size:11px;color:#667085}.nc-save{font-size:9px;color:#1e5631;margin-left:3px}.nc-alert{padding:9px;border-radius:10px;font-size:11px;margin-top:10px}.nc-alert.ok{background:#eaf7ea;color:#1e5631}.nc-alert.warn{background:#fff4df;color:#8a5a00}.nc-alert.bad{background:#fdecea;color:#b42318}.nc-config-disabled{opacity:.55;pointer-events:none}
-  @media(max-width:900px){.nc-select-grid,.nc-main-grid{grid-template-columns:1fr}.nc-stats{grid-template-columns:1fr 1fr}.nc-head{flex-direction:column}.nc-actions{width:100%}.nc-btn{flex:1}.nc-acta{flex-direction:column;align-items:stretch}.nc-search{width:100%}}
-`;}
-function escAttr(v){return String(v??"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
-function cambiarProgramaCentroNotas(p){window.centroNotasDocente=window.centroNotasDocente||{};window.centroNotasDocente.programa=p;window.centroNotasDocente.materia="";window.centroNotasDocente.grupoId="";renderNotasDocente();}
-function cambiarMateriaCentroNotas(m){window.centroNotasDocente=window.centroNotasDocente||{};window.centroNotasDocente.materia=m;window.centroNotasDocente.grupoId="";renderNotasDocente();}
-function abrirGrupoCentroNotas(id){window.centroNotasDocente=window.centroNotasDocente||{};window.centroNotasDocente.grupoId=id;renderNotasDocente();}
-function volverGruposCentroNotas(){window.centroNotasDocente=window.centroNotasDocente||{};window.centroNotasDocente.grupoId="";renderNotasDocente();}
-// Exponer explícitamente las acciones para botones/handlers dinámicos.
-window.cambiarProgramaCentroNotas=cambiarProgramaCentroNotas;window.cambiarMateriaCentroNotas=cambiarMateriaCentroNotas;window.abrirGrupoCentroNotas=abrirGrupoCentroNotas;window.volverGruposCentroNotas=volverGruposCentroNotas;
-
-function renderPanelGrupoCentroNotas(programa,materia,g){
-  const es=estudiantesDeGrupo(programa,materia,g.id), its=getConfigEvaluacion()[g.id]||[], ns=getNotas(), acta=!!getActas()[g.id];
-  const peso=its.reduce((a,i)=>a+(parseFloat(i.peso)||0),0);
-  let complete=0,ap=0,rep=0,pend=0,sum=0,cnt=0;
-  es.forEach(e=>{const n=((ns[g.id]||{})[e.codigo])||{},man=its.filter(i=>i.tipo!=="asistencia");if(man.length===0||man.every(i=>n[i.id]!==undefined&&n[i.id]!==""))complete++;else pend++;const d=parseFloat(calcularDefinitivaGrupo(g.id,e.codigo));if(!isNaN(d)){cnt++;sum+=d;if(d>=3)ap++;else rep++;}});
-  const promedio=cnt?(sum/cnt).toFixed(2):"—",pct=es.length?Math.round(complete/es.length*100):0,puede=peso===100&&es.length&&!acta;
-  const filas=es.map(e=>{const n=((ns[g.id]||{})[e.codigo])||{},d=parseFloat(calcularDefinitivaGrupo(g.id,e.codigo)),st=isNaN(d)?"Pendiente":d>=3?"Aprobada":"Reprobada",cl=st==="Aprobada"?"nc-ok":st==="Reprobada"?"nc-bad":"nc-warn";return `<tr class="nc-student-row"><td><span class="nc-student">${e.nombre}</span><span class="nc-code">${e.codigo}</span></td>${its.map(i=>{if(i.tipo==="asistencia"){const v=calcularNotaAsistencia(g.id,e.codigo);return `<td><b>${v===null?"—":v.toFixed(1)}</b><br><span class="nc-note">automática</span></td>`}const v=n[i.id];return `<td><input class="nc-input" type="number" min="0" max="5" step="0.1" value="${v!==undefined?v:""}" ${acta?"disabled":""} onchange="guardarNotaItem('${g.id}','${e.codigo}','${i.id}',this.value);marcarGuardadoNotaPro(this)" onkeydown="navegarNotaPro(event,this)"><span class="nc-save"></span></td>`}).join("")}<td class="nc-def">${isNaN(d)?"—":d.toFixed(1)}</td><td><span class="nc-status ${cl}">${st}</span></td></tr>`}).join("");
-  document.getElementById("contenido").innerHTML=`<style>${estilosCentroNotas()}</style><div class="nc-panel">
-    <div class="nc-breadcrumb"><button type="button" class="nc-link" id="ncBack">← Mis grupos</button><span>›</span><span>${materia}</span><span>›</span><b>Grupo ${g.grupo||"-"}</b></div>
-    <div class="nc-head"><div><span class="nc-eyebrow">GRUPO ${g.grupo||"-"}</span><h1>${materia}</h1><p>${g.componente?(g.componente==='Teorico'?'Componente Teórico':'Componente Práctico')+" · ":""}${es.length} estudiantes</p></div><div class="nc-actions"><button type="button" class="nc-btn" id="ncCambiarGrupo">Cambiar grupo</button>${acta?`<button type="button" class="nc-btn" id="ncReabrir">↺ Reabrir acta</button>`:`${puede?`<button type="button" class="nc-btn primary" id="ncSubir">🔒 Cerrar y subir acta</button>`:""}`}</div></div>
-    <div class="nc-stats"><div class="nc-stat"><span>Estudiantes</span><b>${es.length}</b></div><div class="nc-stat green"><span>Aprobados</span><b>${ap}</b></div><div class="nc-stat gold"><span>Pendientes</span><b>${pend}</b></div><div class="nc-stat"><span>Promedio</span><b>${promedio}</b></div></div>
-    <div class="nc-main-grid">
-      <aside class="nc-card"><div class="nc-card-title"><h3>⚙️ Configurar evaluación</h3><span class="nc-note">${acta?"Acta cerrada":"Editable"}</span></div>
-        <div class="nc-config-list">${its.length?its.map(i=>`<div class="nc-config-row"><span>${i.tipo==='asistencia'?'✅ ':''}${i.nombre}</span><b>${i.peso}%</b>${acta?'':`<button type="button" class="nc-delete" data-del-item="${i.id}" title="Eliminar">×</button>`}</div>`).join(""):`<div class="nc-note">Aún no has configurado evaluaciones.</div>`}</div>
-        <div class="nc-total"><span>Ponderación total</span><span>${peso}%</span></div>
-        <div class="nc-alert ${peso===100?'ok':peso>100?'bad':'warn'}">${peso===100?'✓ Lista para calificar y cerrar el acta.':peso>100?'⚠ La ponderación supera 100%.':'⚠ Debe completar exactamente el 100%.'}</div>
-        ${acta?'':`<div class="nc-form"><b style="font-size:12px">Agregar evaluación</b><input id="item_nombre_${g.id}" placeholder="Ej. Parcial 1"><div class="nc-form-line"><input id="item_peso_${g.id}" type="number" min="1" max="100" step="1" placeholder="Porcentaje"><button type="button" class="nc-btn primary" id="ncAddItem">Agregar</button></div><label class="nc-check"><input id="item_asistencia_${g.id}" type="checkbox"> Es el ítem de asistencia (automático)</label><div id="avisoItems_${g.id}"></div></div>`}
-      </aside>
-      <section class="nc-card nc-table-card"><div class="nc-toolbar"><div><h3>⚡ Registro de calificaciones</h3><span class="nc-note">Escribe la nota · Enter/Tab avanza.</span></div><input id="ncSearch" class="nc-search" placeholder="🔎 Buscar estudiante o código"></div><div class="nc-table-wrap"><table class="nc-table"><thead><tr><th>Estudiante</th>${its.map(i=>`<th>${i.tipo==='asistencia'?'✅ ':''}${i.nombre}<br><span class="nc-note">${i.peso}%</span></th>`).join("")}<th>Definitiva</th><th>Estado</th></tr></thead><tbody id="tbodyNotasPro">${filas}</tbody></table></div><div class="nc-acta"><div><b>${complete}/${es.length}</b> completos<div class="nc-bar"><i style="width:${pct}%"></i></div></div><div>${puede?`<button type="button" class="nc-btn primary" id="ncSubir2">📤 Publicar acta oficial</button>`:acta?'<b style="font-size:11px;color:#1e5631">✓ Acta oficial subida</b>':'<span class="nc-note">Completa las notas y la ponderación para cerrar.</span>'}</div></div></section>
-    </div></div>`;
-
-  document.getElementById("ncBack")?.addEventListener("click",volverGruposCentroNotas);document.getElementById("ncCambiarGrupo")?.addEventListener("click",volverGruposCentroNotas);
-  const subir=()=>subirActas(programa,g.id,materia);document.getElementById("ncSubir")?.addEventListener("click",subir);document.getElementById("ncSubir2")?.addEventListener("click",subir);
-  document.getElementById("ncReabrir")?.addEventListener("click",()=>reabrirActas(g.id));
-  document.getElementById("ncAddItem")?.addEventListener("click",()=>agregarItemEvaluacion(g.id));
-  document.querySelectorAll("[data-del-item]").forEach(b=>b.addEventListener("click",()=>eliminarItemEvaluacion(g.id,b.dataset.delItem)));
-  document.getElementById("ncSearch")?.addEventListener("input",e=>filtrarEstudiantesNotasPro(e.target.value));
+function manuellesCompletos(manuales,n){
+  return manuales.length===0 ||
+    manuales.every(i=>n[i.id]!==undefined && n[i.id]!=="");
 }
-function filtrarEstudiantesNotasPro(v){const q=String(v||"").toLowerCase().trim();document.querySelectorAll("#tbodyNotasPro tr").forEach(r=>r.style.display=!q||r.innerText.toLowerCase().includes(q)?"":"none");}
-function marcarGuardadoNotaPro(input){const s=input.parentElement.querySelector(".nc-save");if(!s)return;s.textContent="✓";setTimeout(()=>s.textContent="",1200);}
-function navegarNotaPro(e,input){if(e.key!=="Enter"&&e.key!=="Tab")return;e.preventDefault();const a=[...document.querySelectorAll(".nc-input:not(:disabled)")],i=a.indexOf(input);if(i>=0&&i<a.length-1){a[i+1].focus();a[i+1].select();}}
 
+function filtrarEstudiantesNotasPro(v){
+  const q=String(v||"").toLowerCase().trim();
+  document.querySelectorAll("#tbodyNotasPro tr").forEach(r=>{
+    r.style.display=!q || r.innerText.toLowerCase().includes(q) ? "" : "none";
+  });
+}
+
+function marcarGuardadoNotaPro(input){
+  const s=input.parentElement.querySelector(".nc-save");
+  if(!s)return;
+  s.textContent="✓";
+  setTimeout(()=>s.textContent="",1200);
+}
+
+function navegarNotaPro(e,input){
+  if(e.key!=="Enter" && e.key!=="Tab") return;
+  e.preventDefault();
+
+  const a=[...document.querySelectorAll(".nc-input:not(:disabled)")];
+  const i=a.indexOf(input);
+
+  if(i>=0 && i<a.length-1){
+    a[i+1].focus();
+    a[i+1].select();
+  }
+}
 
 /* ======================================================================
    ASISTENCIA — DOCENTE (pasar lista) y ESTUDIANTE (consultar la suya)

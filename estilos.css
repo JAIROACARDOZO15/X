@@ -175,3 +175,10 @@ th{background:#eef3ee}
   .full{grid-column:1}
   .dashboard-grid{grid-template-columns:1fr 1fr}
 }
+
+
+/* Compatibilidad con el nuevo Centro de Calificaciones */
+.nc-btn,.nc-group,.nc-link,.nc-delete{font-family:inherit}
+.nc-btn,.nc-delete{width:auto;margin:0}
+.nc-group{line-height:1.35}
+.nc-config-wide input,.nc-config-wide select,.nc-config-wide button{box-sizing:border-box}
