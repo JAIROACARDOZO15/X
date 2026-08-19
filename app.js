@@ -978,6 +978,17 @@ function cambiarFoto(){
   setTimeout(()=>nota.remove(), 4000);
 }
 
+/* Escapa valores antes de insertarlos en atributos HTML.
+   Se usa en botones, selects e inputs creados dinámicamente. */
+function escAttr(valor){
+  return String(valor ?? '')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/\"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
 /* ======================================================================
    CONFIRMACIÓN Y AVISOS DENTRO DE LA PÁGINA
    (en vez de confirm()/alert(), que quedan bloqueados en algunos
