@@ -1008,6 +1008,20 @@ function cancelarAccionPendiente(){
   document.getElementById("contenido").innerHTML = contenidoAntesDeConfirmar;
 }
 
+
+/* ----------------------------------------------------------------------
+   UTILIDAD DE SEGURIDAD PARA LOS BOTONES/SELECTS DEL CENTRO DE NOTAS
+   Evita ReferenceError y protege los valores insertados en atributos HTML.
+   ---------------------------------------------------------------------- */
+function escAttr(valor){
+  return String(valor ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function irDocente(vista){
   vistaDocenteActual = vista;
   if(vista==='horario') renderHorarioDocente();
@@ -4531,8 +4545,7 @@ function estadoCentroNotas(){
     window.centroNotasDocente = {
       programa: programas[0] || "",
       materia: "",
-      grupoId: "",
-      vista: "lista"
+      grupoId: ""
     };
   }
   return window.centroNotasDocente;
@@ -4543,7 +4556,6 @@ function cambiarProgramaCentroNotas(programa){
   s.programa = programa || "";
   s.materia = "";
   s.grupoId = "";
-  s.vista = "lista";
   renderNotasDocente();
 }
 
@@ -4551,21 +4563,18 @@ function cambiarMateriaCentroNotas(materia){
   const s = estadoCentroNotas();
   s.materia = materia || "";
   s.grupoId = "";
-  s.vista = "lista";
   renderNotasDocente();
 }
 
 function abrirGrupoCentroNotas(grupoId){
   const s = estadoCentroNotas();
   s.grupoId = grupoId || "";
-  s.vista = "grupo";
   renderNotasDocente();
 }
 
 function volverGruposCentroNotas(){
   const s = estadoCentroNotas();
   s.grupoId = "";
-  s.vista = "lista";
   renderNotasDocente();
 }
 
@@ -4602,22 +4611,16 @@ function renderNotasDocente(){
     g => g.docente === usuarioActual.nombre
   );
 
-  // Nunca abras un grupo automáticamente. La pantalla de Notas debe empezar
-  // en "Mis grupos" para que el docente pueda elegir entre todas sus materias
-  // y grupos, incluso cuando una materia tenga un solo grupo.
   if(!grupos.some(g => g.id === s.grupoId)){
-    s.grupoId = "";
+    s.grupoId = grupos.length === 1 ? grupos[0].id : "";
   }
 
   const g = grupos.find(x => x.id === s.grupoId);
 
-  if(s.vista === "grupo" && g){
+  if(g){
     renderPanelGrupoCentroNotas(s.programa, s.materia, g);
     return;
   }
-
-  // Si llegamos a la lista por cualquier motivo, forzamos el estado de navegación.
-  s.vista = "lista";
 
   const cards = grupos.map(x => {
     const es = estudiantesDeGrupo(s.programa, s.materia, x.id);
@@ -4684,7 +4687,7 @@ function renderNotasDocente(){
         <div class="nc-select-grid">
           <label>
             <span>Programa académico</span>
-            <select id="ncPrograma" onchange="cambiarProgramaCentroNotas(this.value)">
+            <select id="ncPrograma">
               ${programas.map(p => `
                 <option value="${escAttr(p)}" ${p === s.programa ? "selected" : ""}>
                   ${p}
@@ -4694,7 +4697,7 @@ function renderNotasDocente(){
 
           <label>
             <span>Materia</span>
-            <select id="ncMateria" onchange="cambiarMateriaCentroNotas(this.value)">
+            <select id="ncMateria">
               ${materias.map(m => `
                 <option value="${escAttr(m)}" ${m === s.materia ? "selected" : ""}>
                   ${m} · ${(gp[m] || []).filter(x => x.docente === usuarioActual.nombre).length} grupo(s)
@@ -4708,7 +4711,7 @@ function renderNotasDocente(){
         <div>
           <span class="nc-eyebrow">MIS GRUPOS</span>
           <h2>${s.materia || "Mis materias"}</h2>
-          <p>${grupos.length} grupo(s) disponibles para esta materia · ${materias.length} materia(s) asignada(s).</p>
+          <p>${grupos.length} grupo(s) disponibles para este docente.</p>
         </div>
       </section>
 
