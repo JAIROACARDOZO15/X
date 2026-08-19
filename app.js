@@ -620,6 +620,15 @@ function saveActas(obj){
   localStorage.setItem("uan_actas", JSON.stringify(obj));
   empujarActasASupabase(obj);
 }
+
+/* Fecha límite (por programa) que el Coordinador Académico define para que los
+   docentes carguen/corrijan notas. Pasada esa fecha, los docentes ven sus notas
+   en solo lectura y deben pedirle el cambio al Coordinador, quien sí puede seguir
+   editando/corrigiendo cualquier grupo del programa hasta que cierre el semestre. */
+function getFechaLimiteNotas(){ return JSON.parse(localStorage.getItem("uan_fecha_limite_notas") || "{}"); }
+function saveFechaLimiteNotas(obj){
+  localStorage.setItem("uan_fecha_limite_notas", JSON.stringify(obj));
+}
 function getEvaluacionesDocente(){ return JSON.parse(localStorage.getItem("uan_evaluaciones_docente") || "{}"); }
 function saveEvaluacionesDocente(obj){
   localStorage.setItem("uan_evaluaciones_docente", JSON.stringify(obj));
@@ -1174,6 +1183,8 @@ function renderSidebar(){
       <div class="menu-item" onclick="renderVerGrupos()">Ver Grupos Programados <span>›</span></div>
       <div class="menu-item" onclick="renderGestionMatriculas()">Abrir / Cerrar Matrículas <span>›</span></div>
       <div class="menu-item" onclick="renderInclusiones()">Inclusiones (cambios manuales) <span>›</span></div>
+      <div class="menu-item" onclick="renderFechaLimiteNotas()">Fecha Límite de Notas <span>›</span></div>
+      <div class="menu-item" onclick="renderNotasCoordinador()">Corrección de Notas <span>›</span></div>
     `;
     renderHomeDashboard();
   }
@@ -1243,7 +1254,9 @@ function renderHomeDashboard(){
       {icono:"🗓️", label:"Programar Materia", accion:"renderProgramarMateria()"},
       {icono:"👥", label:"Ver Grupos", accion:"renderVerGrupos()"},
       {icono:"🔓", label:"Abrir/Cerrar Matrículas", accion:"renderGestionMatriculas()"},
-      {icono:"✏️", label:"Inclusiones", accion:"renderInclusiones()"}
+      {icono:"✏️", label:"Inclusiones", accion:"renderInclusiones()"},
+      {icono:"⏰", label:"Fecha Límite de Notas", accion:"renderFechaLimiteNotas()"},
+      {icono:"📊", label:"Corrección de Notas", accion:"renderNotasCoordinador()"}
     ];
   }
 
@@ -1676,6 +1689,11 @@ function crearPensum(){
 
     <button class="add-btn" onclick="agregarNivel()">+ Agregar Nivel</button>
     <button onclick="guardarPensum()">Guardar Plan de Estudios</button>
+
+    <!-- Se recalcula en vivo con actualizarDatalistMateriasPensum() para que el campo
+         "Requisitos" ofrezca autocompletado con los nombres EXACTOS ya escritos en el
+         pensum, y así evitar que un requisito quede mal escrito y nunca se cumpla. -->
+    <datalist id="datalistMateriasPensum"></datalist>
   `;
 
   if(existente && existente.sede){
@@ -1692,6 +1710,8 @@ function crearPensum(){
       agregarNivel(existente.niveles[nombreNivel], creditosExistentes, tiposExistentes, prerequisitosExistentes);
     });
   }
+
+  actualizarDatalistMateriasPensum();
 }
 
 function agregarNivel(materiasPrevias, creditosExistentes, tiposExistentes, prerequisitosExistentes){
@@ -1712,6 +1732,7 @@ function agregarNivel(materiasPrevias, creditosExistentes, tiposExistentes, prer
     <button onclick="agregarFila(${nivelCount})">+ Materia</button>
   `;
   document.getElementById("niveles").appendChild(div);
+  actualizarDatalistMateriasPensum();
 }
 
 function filaMateriaHtml(nombre, creditosVal, tipoInfo, prereqArray){
@@ -1721,13 +1742,27 @@ function filaMateriaHtml(nombre, creditosVal, tipoInfo, prereqArray){
   const pct = (tipoInfo && tipoInfo.pctTeorico!==undefined) ? tipoInfo.pctTeorico : 70;
   const prereqTexto = (prereqArray && prereqArray.length) ? prereqArray.join(", ") : "";
   return `<tr>
-    <td><input value="${nombre||""}" placeholder="Ej: Electiva VII"></td>
+    <td><input class="nombreMateriaInput" value="${nombre||""}" placeholder="Ej: Electiva VII" onblur="actualizarDatalistMateriasPensum()"></td>
     <td><input type="number" min="1" value="${cred}" style="width:70px"></td>
     <td style="text-align:center"><input type="checkbox" onchange="toggleTP(this)" ${esTP?"checked":""}></td>
     <td><input type="number" min="1" max="99" value="${pct}" style="width:70px" placeholder="% Teórico" ${esTP?"":"disabled"}></td>
-    <td><input value="${prereqTexto}" placeholder="Ej: Cálculo I" style="width:140px"></td>
+    <td><input value="${prereqTexto}" placeholder="Ej: Cálculo I" style="width:140px" list="datalistMateriasPensum" onfocus="actualizarDatalistMateriasPensum()" title="Puedes escribir varios separados por coma. Empieza a escribir y elige de la lista para evitar errores de tipeo."></td>
     <td style="text-align:center"><input type="checkbox" ${esElectiva?"checked":""} title="Es un cupo de electiva: el estudiante elige entre un catálogo de cursos"></td>
   </tr>`;
+}
+
+/* Refresca las sugerencias del campo "Requisitos" con los nombres EXACTOS de
+   materia que ya están escritos en el pensum (en cualquier nivel/tabla), para
+   que el director pueda escogerlos en vez de volver a teclearlos y arriesgarse
+   a un error de tipeo que deje un requisito imposible de cumplir. */
+function actualizarDatalistMateriasPensum(){
+  const dl = document.getElementById("datalistMateriasPensum");
+  if(!dl) return;
+  const nombres = Array.from(document.querySelectorAll(".nombreMateriaInput"))
+    .map(inp=>inp.value.trim())
+    .filter(Boolean);
+  const unicos = [...new Set(nombres)].sort();
+  dl.innerHTML = unicos.map(n=>`<option value="${escAttr(n)}"></option>`).join("");
 }
 
 function toggleTP(chk){
@@ -1739,6 +1774,7 @@ function agregarFila(n){
   let tabla=document.getElementById("tabla"+n);
   let row=tabla.insertRow();
   row.innerHTML = filaMateriaHtml("", 3, null, null);
+  actualizarDatalistMateriasPensum();
 }
 
 function guardarPensum(){
@@ -1794,25 +1830,41 @@ function guardarPensum(){
     return;
   }
 
-  // Validación suave: si un requisito no coincide con el nombre exacto de ninguna materia del pensum, avisamos.
+  // Validación ESTRICTA: si un requisito no coincide con el nombre exacto de ninguna
+  // materia del pensum, o si una materia se pone a sí misma como requisito, no se
+  // guarda nada — así nunca queda un requisito "fantasma" que ningún estudiante
+  // pueda cumplir jamás. El datalist de arriba ayuda a elegir el nombre exacto.
   const todasLasMaterias = Object.values(niveles).flat();
   let requisitosNoEncontrados = [];
+  let requisitosAutoReferencia = [];
   Object.keys(prerequisitos).forEach(materia=>{
     prerequisitos[materia].forEach(req=>{
-      if(!todasLasMaterias.includes(req)) requisitosNoEncontrados.push(`"${req}" (requisito de "${materia}")`);
+      if(req===materia){
+        requisitosAutoReferencia.push(materia);
+      } else if(!todasLasMaterias.includes(req)){
+        requisitosNoEncontrados.push(`"${req}" (requisito de "${materia}")`);
+      }
     });
   });
+
+  if(requisitosNoEncontrados.length || requisitosAutoReferencia.length){
+    let mensajes = [];
+    if(requisitosNoEncontrados.length){
+      mensajes.push(`Estos requisitos no coinciden con el nombre EXACTO de ninguna materia del pensum: ${requisitosNoEncontrados.join(", ")}. Usa el autocompletado del campo Requisitos para elegir el nombre correcto.`);
+    }
+    if(requisitosAutoReferencia.length){
+      mensajes.push(`Estas materias se pusieron a sí mismas como requisito, lo cual es imposible de cumplir: ${requisitosAutoReferencia.join(", ")}.`);
+    }
+    document.getElementById("avisoPensum").innerHTML = `<div class="aviso aviso-error">⚠ No se guardó el plan de estudios. ${mensajes.join(" ")}</div>`;
+    return;
+  }
 
   const programas = getProgramas();
   const electivasExistentes = (programas[programaNombre] && programas[programaNombre].electivas) || {};
   programas[programaNombre] = { sede, niveles, creditos, tipos, prerequisitos, electivas: electivasExistentes };
   savePrograms(programas);
 
-  const avisoRequisitos = requisitosNoEncontrados.length
-    ? `<br><span style="color:#a83232">⚠ Estos requisitos no coinciden con el nombre exacto de ninguna materia del pensum, revísalos: ${requisitosNoEncontrados.join(", ")}</span>`
-    : "";
-
-  document.getElementById("avisoPensum").innerHTML=`<div class="aviso">✅ Plan de estudios de ${programaNombre} guardado. Los estudiantes de este programa ya pueden verlo.${avisoRequisitos}</div>`;
+  document.getElementById("avisoPensum").innerHTML=`<div class="aviso">✅ Plan de estudios de ${programaNombre} guardado. Los estudiantes de este programa ya pueden verlo.</div>`;
 }
 
 function verPensumAdmin(){
@@ -2979,6 +3031,60 @@ function eliminarGrupo(materia, id){
    Permite corregir a mano lo que la asignación automática no pudo resolver:
    cambiar de grupo/docente, quitar una materia o incluir una nueva.
    ====================================================================== */
+/* ================================================================
+   FECHA LÍMITE DE NOTAS — la define el Coordinador Académico por programa.
+   Pasada esa fecha, los docentes ya no pueden cargar/editar notas (ven todo
+   en solo lectura); el Coordinador sí conserva acceso para corregir.
+   ================================================================ */
+function renderFechaLimiteNotas(mensaje){
+  const programaNombre = usuarioActual.programa;
+  const fechas = getFechaLimiteNotas();
+  const actual = fechas[programaNombre] || "";
+  const hoy = new Date().toISOString().slice(0,10);
+  const vencida = actual && hoy > actual;
+
+  document.getElementById("contenido").innerHTML = `
+    <h2 class="panel-title">Fecha Límite de Notas — ${programaNombre}</h2>
+    ${mensaje ? `<div class="aviso">${mensaje}</div>` : ""}
+    <p style="font-size:13px;color:#666;max-width:560px">
+      Define hasta qué fecha pueden los docentes de <b>${programaNombre}</b> cargar o corregir notas.
+      Pasada esa fecha, sus pantallas de notas quedan en solo lectura y cualquier corrección debe
+      hacerla el Coordinador desde <b>Corrección de Notas</b>.
+    </p>
+    ${actual
+      ? `<div class="aviso ${vencida?"aviso-error":""}">
+           ${vencida ? "⏰ La fecha límite ya venció" : "📅 Fecha límite actual"}: <b>${actual}</b>
+         </div>`
+      : `<div class="aviso aviso-error">Aún no has definido una fecha límite para este programa; los docentes pueden editar notas sin restricción de fecha.</div>`}
+    <div class="form-grid">
+      <div><label>Nueva fecha límite</label><input id="fln_fecha" type="date" value="${actual}"></div>
+      <div class="full"><button onclick="guardarFechaLimiteNotas()">Guardar Fecha Límite</button></div>
+      ${actual ? `<div class="full"><button class="btn-secundario" onclick="quitarFechaLimiteNotas()">Quitar fecha límite (sin restricción)</button></div>` : ""}
+    </div>
+  `;
+}
+
+function guardarFechaLimiteNotas(){
+  const programaNombre = usuarioActual.programa;
+  const valor = document.getElementById("fln_fecha").value;
+  if(!valor){
+    renderFechaLimiteNotas();
+    return;
+  }
+  const fechas = getFechaLimiteNotas();
+  fechas[programaNombre] = valor;
+  saveFechaLimiteNotas(fechas);
+  renderFechaLimiteNotas("✅ Fecha límite actualizada. Los docentes de este programa la verán reflejada de inmediato.");
+}
+
+function quitarFechaLimiteNotas(){
+  const programaNombre = usuarioActual.programa;
+  const fechas = getFechaLimiteNotas();
+  delete fechas[programaNombre];
+  saveFechaLimiteNotas(fechas);
+  renderFechaLimiteNotas("✅ Se quitó la fecha límite. Los docentes pueden volver a editar notas sin restricción.");
+}
+
 function renderInclusiones(mensaje){
   const programaNombre = usuarioActual.programa;
   const matriculas = getMatriculas();
@@ -4396,6 +4502,15 @@ function calcularDefinitivaGrupo(grupoId, codigo){
   return (sumaPonderada/sumaPeso).toFixed(1);
 }
 
+/* Tanto el docente como el coordinador pueden llegar a agregarItemEvaluacion/
+   eliminarItemEvaluacion/subirActas/reabrirActas (el coordinador desde su panel
+   de "Corrección de Notas"). Este helper vuelve a dibujar la pantalla correcta
+   según quién esté conectado. */
+function renderVistaNotasActual(){
+  if(usuarioActual.rol === "coordinador") renderNotasCoordinador();
+  else renderNotasDocente();
+}
+
 function agregarItemEvaluacion(grupoId){
   const nombre = document.getElementById("item_nombre_"+grupoId).value.trim();
   const peso = parseFloat(document.getElementById("item_peso_"+grupoId).value);
@@ -4418,14 +4533,14 @@ function agregarItemEvaluacion(grupoId){
   }
   config[grupoId].push({ id: siguienteIdItemEvaluacion(), nombre, peso, tipo: esAsistencia ? "asistencia" : "manual" });
   saveConfigEvaluacion(config);
-  renderNotasDocente();
+  renderVistaNotasActual();
 }
 
 function eliminarItemEvaluacion(grupoId, itemId){
   const config = getConfigEvaluacion();
   config[grupoId] = (config[grupoId]||[]).filter(it=>it.id!==itemId);
   saveConfigEvaluacion(config);
-  renderNotasDocente();
+  renderVistaNotasActual();
 }
 
 /* Intenta publicar en el historial la nota definitiva de una materia para un estudiante.
@@ -4518,7 +4633,7 @@ function subirActas(programaNombre, grupoId, materia){
       intentarPublicarHistorial(programaNombre, materia, e.codigo);
     });
 
-    renderNotasDocente();
+    renderVistaNotasActual();
   });
 }
 
@@ -4527,7 +4642,7 @@ function reabrirActas(grupoId){
     const actas = getActas();
     actas[grupoId] = false;
     saveActas(actas);
-    renderNotasDocente();
+    renderVistaNotasActual();
   });
 }
 
@@ -4622,7 +4737,7 @@ function renderNotasDocente(){
   const g = grupos.find(x => x.id === s.grupoId);
 
   if(g){
-    renderPanelGrupoCentroNotas(s.programa, s.materia, g);
+    renderPanelGrupoCentroNotas(s.programa, s.materia, g, {volverFn:'volverGruposCentroNotas'});
     return;
   }
 
@@ -4737,6 +4852,181 @@ function renderNotasDocente(){
   document.getElementById("ncMateria")?.addEventListener(
     "change",
     e => cambiarMateriaCentroNotas(e.target.value)
+  );
+}
+
+/* ================================================================
+   CORRECCIÓN DE NOTAS — COORDINADOR
+   Mismo panel visual que el del docente, pero: (1) ve TODOS los grupos
+   del programa sin importar quién los dicta, y (2) nunca queda bloqueado
+   por la fecha límite de notas (esa fecha solo aplica a los docentes).
+   ================================================================ */
+function estadoNotasCoordinador(){
+  if(!window.notasCoordinador){
+    window.notasCoordinador = { materia:"", grupoId:"", verListaGrupos:false };
+  }
+  return window.notasCoordinador;
+}
+
+function cambiarMateriaNotasCoordinador(materia){
+  const s = estadoNotasCoordinador();
+  s.materia = materia || "";
+  s.grupoId = "";
+  s.verListaGrupos = false;
+  renderNotasCoordinador();
+}
+
+function abrirGrupoNotasCoordinador(grupoId){
+  const s = estadoNotasCoordinador();
+  s.grupoId = grupoId || "";
+  s.verListaGrupos = false;
+  renderNotasCoordinador();
+}
+
+function volverGruposNotasCoordinador(){
+  const s = estadoNotasCoordinador();
+  s.grupoId = "";
+  s.verListaGrupos = true;
+  renderNotasCoordinador();
+}
+
+window.cambiarMateriaNotasCoordinador = cambiarMateriaNotasCoordinador;
+window.abrirGrupoNotasCoordinador = abrirGrupoNotasCoordinador;
+window.volverGruposNotasCoordinador = volverGruposNotasCoordinador;
+
+function renderNotasCoordinador(){
+  const programaNombre = usuarioActual.programa;
+  const gp = getGrupos()[programaNombre] || {};
+  const materias = Object.keys(gp).filter(m => (gp[m]||[]).length>0);
+  const s = estadoNotasCoordinador();
+
+  if(!materias.includes(s.materia)){
+    s.materia = materias[0] || "";
+    s.grupoId = "";
+  }
+
+  const grupos = gp[s.materia] || [];
+
+  if(!grupos.some(g => g.id === s.grupoId)){
+    s.grupoId = (grupos.length === 1 && !s.verListaGrupos) ? grupos[0].id : "";
+  }
+
+  const g = grupos.find(x => x.id === s.grupoId);
+
+  if(g){
+    renderPanelGrupoCentroNotas(programaNombre, s.materia, g, {
+      volverFn: 'volverGruposNotasCoordinador',
+      modoCoordinador: true
+    });
+    return;
+  }
+
+  const actas = getActas();
+  const configs = getConfigEvaluacion();
+  const fechaLimite = getFechaLimiteNotas()[programaNombre] || "";
+
+  const cards = grupos.map(x => {
+    const es = estudiantesDeGrupo(programaNombre, s.materia, x.id);
+    const its = configs[x.id] || [];
+    const ns = getNotas();
+
+    let done = 0;
+    es.forEach(e => {
+      const n = ((ns[x.id] || {})[e.codigo]) || {};
+      const manuales = its.filter(i => i.tipo !== "asistencia");
+      if(manuales.length === 0 ||
+         manuales.every(i => n[i.id] !== undefined && n[i.id] !== "")){
+        done++;
+      }
+    });
+
+    const pct = es.length ? Math.round(done / es.length * 100) : 0;
+    const acta = !!actas[x.id];
+    const componente = x.componente
+      ? (x.componente === "Teorico" ? "Teórico" : "Práctico")
+      : "Grupo regular";
+
+    return `
+      <button type="button"
+              class="nc-group"
+              onclick="abrirGrupoNotasCoordinador('${escAttr(x.id)}')"
+              aria-label="Abrir grupo ${escAttr(x.grupo || "-")}">
+        <div class="nc-group-top">
+          <div>
+            <span class="nc-kicker">GRUPO</span>
+            <h3>${x.grupo || "-"}</h3>
+            <p>${componente} · ${x.docente || "Sin docente"}</p>
+          </div>
+          <span class="nc-arrow">→</span>
+        </div>
+
+        <div class="nc-group-meta">
+          <span>👥 ${es.length} estudiantes</span>
+          <span>📊 ${pct}%</span>
+        </div>
+
+        <div class="nc-progress"><i style="width:${pct}%"></i></div>
+
+        <div class="nc-group-foot">
+          <span>${x.horario || "Horario no registrado"}</span>
+          ${acta
+            ? '<b class="nc-chip ok">✓ Acta subida</b>'
+            : '<b class="nc-chip">● En edición</b>'}
+        </div>
+      </button>`;
+  }).join("");
+
+  document.getElementById("contenido").innerHTML = `
+    <style>${estilosCentroNotas()}</style>
+
+    <div class="nc-shell">
+      <section class="nc-hero">
+        <div class="nc-hero-copy">
+          <span class="nc-eyebrow">COORDINACIÓN · CORRECCIÓN DE NOTAS</span>
+          <h1>Notas de todos los docentes</h1>
+          <p>Puedes ver y corregir las notas de cualquier grupo de ${programaNombre}, incluso con el acta cerrada o la fecha límite vencida.</p>
+        </div>
+
+        <div class="nc-select-grid">
+          <label>
+            <span>Materia</span>
+            <select id="ncCoordMateria">
+              ${materias.map(m => `
+                <option value="${escAttr(m)}" ${m === s.materia ? "selected" : ""}>
+                  ${m} · ${(gp[m] || []).length} grupo(s)
+                </option>`).join("")}
+            </select>
+          </label>
+        </div>
+
+        <p style="font-size:13px;margin-top:10px">
+          ${fechaLimite
+            ? `📅 Fecha límite de notas para docentes: <b>${fechaLimite}</b> — <a href="#" onclick="renderFechaLimiteNotas();return false">cambiar</a>`
+            : `⚠️ No has definido fecha límite para este programa — <a href="#" onclick="renderFechaLimiteNotas();return false">definirla</a>`}
+        </p>
+      </section>
+
+      <section class="nc-section-head">
+        <div>
+          <span class="nc-eyebrow">GRUPOS</span>
+          <h2>${s.materia || "Materias"}</h2>
+          <p>${grupos.length} grupo(s) programados para esta materia.</p>
+        </div>
+      </section>
+
+      <div class="nc-grid">
+        ${cards || `
+          <div class="nc-empty">
+            <div class="nc-empty-icon">📚</div>
+            <h3>No hay grupos programados</h3>
+            <p>Selecciona otra materia o revisa "Programar Materia".</p>
+          </div>`}
+      </div>
+    </div>`;
+
+  document.getElementById("ncCoordMateria")?.addEventListener(
+    "change",
+    e => cambiarMateriaNotasCoordinador(e.target.value)
   );
 }
 
@@ -5327,11 +5617,21 @@ function estilosCentroNotas(){ return `
 `;}
 
 /* Panel de un grupo concreto. */
-function renderPanelGrupoCentroNotas(programa,materia,g){
+function renderPanelGrupoCentroNotas(programa,materia,g,opts){
+  opts = opts || {};
+  const volverFn = opts.volverFn || 'volverGruposCentroNotas';
+  const modoCoordinador = !!opts.modoCoordinador;
+
   const es = estudiantesDeGrupo(programa,materia,g.id);
   const its = getConfigEvaluacion()[g.id] || [];
   const ns = getNotas();
   const acta = !!getActas()[g.id];
+
+  const fechaLimite = getFechaLimiteNotas()[programa] || "";
+  const hoy = new Date().toISOString().slice(0,10);
+  // La fecha límite solo aplica a docentes; el coordinador nunca queda bloqueado por ella.
+  const fechaVencida = !modoCoordinador && !!fechaLimite && hoy > fechaLimite;
+  const soloLectura = acta || fechaVencida;
 
   const peso = its.reduce((a,i)=>a+(parseFloat(i.peso)||0),0);
 
@@ -5355,7 +5655,7 @@ function renderPanelGrupoCentroNotas(programa,materia,g){
 
   const promedio=cnt?(sum/cnt).toFixed(2):"—";
   const pct=es.length?Math.round(complete/es.length*100):0;
-  const puede=peso===100 && es.length && !acta;
+  const puede=peso===100 && es.length && !soloLectura;
 
   const filas=es.map(e=>{
     const n=((ns[g.id]||{})[e.codigo])||{};
@@ -5375,7 +5675,7 @@ function renderPanelGrupoCentroNotas(programa,materia,g){
         <input class="nc-input"
           type="number" min="0" max="5" step="0.1"
           value="${v!==undefined?v:""}"
-          ${acta?"disabled":""}
+          ${soloLectura?"disabled":""}
           onchange="guardarNotaItem('${escAttr(g.id)}','${escAttr(e.codigo)}','${escAttr(i.id)}',this.value);marcarGuardadoNotaPro(this)"
           onkeydown="navegarNotaPro(event,this)">
         <span class="nc-save"></span>
@@ -5399,14 +5699,21 @@ function renderPanelGrupoCentroNotas(programa,materia,g){
     <div class="nc-panel">
 
       <div class="nc-breadcrumb">
-        <button type="button" class="nc-link" onclick="volverGruposCentroNotas()">
-          ← Mis grupos
+        <button type="button" class="nc-link" onclick="${volverFn}()">
+          ← ${modoCoordinador ? "Mis materias" : "Mis grupos"}
         </button>
         <span>›</span>
         <span>${materia}</span>
         <span>›</span>
         <b>Grupo ${g.grupo||"-"}</b>
+        ${modoCoordinador ? `<span class="badge" style="background:#e6a324;margin-left:8px">Modo coordinador</span>` : ""}
       </div>
+
+      ${fechaVencida ? `
+        <div class="aviso aviso-error">
+          🔒 La fecha límite para cargar/corregir notas (<b>${fechaLimite}</b>) ya venció.
+          Si necesitas hacer un cambio, contacta a Coordinación Académica.
+        </div>` : ""}
 
       <section class="nc-head">
         <div>
@@ -5421,19 +5728,21 @@ function renderPanelGrupoCentroNotas(programa,materia,g){
         </div>
 
         <div class="nc-actions">
-          <button type="button" class="nc-btn" onclick="volverGruposCentroNotas()">
-            ← Cambiar grupo
+          <button type="button" class="nc-btn" onclick="${volverFn}()">
+            ← ${modoCoordinador ? "Cambiar materia/grupo" : "Cambiar grupo"}
           </button>
 
-          ${acta
-            ? `<button type="button" class="nc-btn" onclick="reabrirActas('${escAttr(g.id)}')">
-                 ↺ Reabrir acta
-               </button>`
-            : (puede
-              ? `<button type="button" class="nc-btn primary" onclick="subirActas('${escAttr(programa)}','${escAttr(g.id)}','${escAttr(materia)}')">
-                   🔒 Cerrar y publicar acta
+          ${fechaVencida
+            ? ""
+            : (acta
+              ? `<button type="button" class="nc-btn" onclick="reabrirActas('${escAttr(g.id)}')">
+                   ↺ Reabrir acta
                  </button>`
-              : "")}
+              : (puede
+                ? `<button type="button" class="nc-btn primary" onclick="subirActas('${escAttr(programa)}','${escAttr(g.id)}','${escAttr(materia)}')">
+                     🔒 Cerrar y publicar acta
+                   </button>`
+                : ""))}
         </div>
       </section>
 
@@ -5452,6 +5761,7 @@ function renderPanelGrupoCentroNotas(programa,materia,g){
         </div>
       </div>
 
+
       <!-- CONFIGURACIÓN A TODO LO ANCHO -->
       <section class="nc-config-wide">
         <div class="nc-config-header">
@@ -5460,7 +5770,9 @@ function renderPanelGrupoCentroNotas(programa,materia,g){
             <span class="nc-note">
               ${acta
                 ? "El acta está cerrada. Reábrela para modificar la configuración."
-                : "Define los porcentajes antes de capturar las calificaciones."}
+                : fechaVencida
+                  ? "La fecha límite de notas venció; no puedes modificar la configuración."
+                  : "Define los porcentajes antes de capturar las calificaciones."}
             </span>
           </div>
           <b>${peso}% / 100%</b>
@@ -5472,7 +5784,7 @@ function renderPanelGrupoCentroNotas(programa,materia,g){
               <div class="nc-config-row">
                 <span>${i.tipo==="asistencia"?"✅ ":""}${i.nombre}</span>
                 <b>${i.peso}%</b>
-                ${acta
+                ${soloLectura
                   ? ""
                   : `<button type="button"
                        class="nc-delete"
@@ -5497,10 +5809,11 @@ function renderPanelGrupoCentroNotas(programa,materia,g){
               : `⚠ Faltan ${Math.max(0,100-peso)}% para completar la evaluación.`}
         </div>
 
-        ${acta
+        ${soloLectura
           ? `<div class="nc-alert warn">
-               🔒 Configuración bloqueada porque el acta está publicada.
-               Usa <b>Reabrir acta</b> arriba para editarla.
+               🔒 ${acta
+                 ? `Configuración bloqueada porque el acta está publicada. Usa <b>Reabrir acta</b> arriba para editarla.`
+                 : `Configuración bloqueada: la fecha límite de notas (${fechaLimite}) ya venció.`}
              </div>`
           : `
             <div class="nc-form">
@@ -5576,7 +5889,9 @@ function renderPanelGrupoCentroNotas(programa,materia,g){
                  </button>`
               : acta
                 ? '<b style="font-size:11px;color:#1e5631">✓ Acta oficial subida</b>'
-                : '<span class="nc-note">Completa las notas y la ponderación para cerrar.</span>'}
+                : fechaVencida
+                  ? '<span class="nc-note" style="color:#a83232">La fecha límite de notas ya venció.</span>'
+                  : '<span class="nc-note">Completa las notas y la ponderación para cerrar.</span>'}
           </div>
         </div>
       </section>
