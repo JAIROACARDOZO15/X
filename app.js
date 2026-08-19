@@ -3837,26 +3837,40 @@ function renderHorarioEstudiante(){
 
 function obtenerNivelIndice(codigo, programaNombre, nivelesKeys){
   const niveles = getNivelesEstudiantes();
-  if(niveles[codigo] !== undefined){
-    return Math.min(Math.max(niveles[codigo],0), nivelesKeys.length-1);
-  }
-  // Bootstrap: si el estudiante no tiene contador de nivel todavía, se calcula
-  // una sola vez a partir de su historial y se guarda para siempre.
   const historial = getHistorial()[codigo] || {};
   const data = getProgramas()[programaNombre] || {niveles:{}};
-  const estaAprobada = m => !!(historial[m] && historial[m].aprobada);
-  let idx = 0;
-  for(let i=0;i<nivelesKeys.length;i++){
-    const materias = data.niveles[nivelesKeys[i]] || [];
-    const pend = materias.some(m=>!estaAprobada(m));
-    if(pend){ idx=i; break; }
-    idx = Math.min(i+1, nivelesKeys.length-1);
-  }
-  niveles[codigo] = idx;
-  saveNivelesEstudiantes(niveles);
-  return idx;
-}
 
+  // Una materia está aprobada si aparece en el historial
+  // y su definitiva está marcada como aprobada.
+  const estaAprobada = materia =>
+    !!(historial[materia] && historial[materia].aprobada);
+
+  // El nivel actual siempre es el PRIMER nivel que tenga
+  // al menos una materia pendiente.
+  //
+  // Si Nivel 1 está completamente aprobado,
+  // el estudiante pasa automáticamente a Nivel 2.
+  let idxActual = nivelesKeys.length - 1;
+
+  for(let i = 0; i < nivelesKeys.length; i++){
+    const materias = data.niveles[nivelesKeys[i]] || [];
+
+    const tienePendientes = materias.some(m => !estaAprobada(m));
+
+    if(tienePendientes){
+      idxActual = i;
+      break;
+    }
+  }
+
+  // Guardamos el nivel actualizado para que quede sincronizado.
+  if(niveles[codigo] !== idxActual){
+    niveles[codigo] = idxActual;
+    saveNivelesEstudiantes(niveles);
+  }
+
+  return idxActual;
+}
 function calcularSituacionAcademica(codigo, programaNombre){
   const data = getProgramas()[programaNombre] || {niveles:{}, creditos:{}};
   const nivelesKeys = Object.keys(data.niveles || {});
