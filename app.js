@@ -1010,12 +1010,22 @@ function cancelarAccionPendiente(){
 
 function irDocente(vista){
   vistaDocenteActual = vista;
-  if(vista==='horario') renderHorarioDocente();
-  else if(vista==='notas') renderNotasDocente();
-  else if(vista==='asistencia') renderAsistenciaDocente();
-  else if(vista==='evaluacion') renderEvaluacionRecibidaDocente();
-  else if(vista==='password') renderCambiarPasswordDocente();
+  try{
+    if(vista==='horario') renderHorarioDocente();
+    else if(vista==='notas') renderNotasDocente();
+    else if(vista==='asistencia') renderAsistenciaDocente();
+    else if(vista==='evaluacion') renderEvaluacionRecibidaDocente();
+    else if(vista==='password') renderCambiarPasswordDocente();
+  }catch(err){
+    console.error('Error al abrir la vista docente:', vista, err);
+    const contenido = document.getElementById('contenido');
+    if(contenido){
+      contenido.innerHTML = `<div class="aviso aviso-error"><b>No se pudo abrir esta sección.</b><br><small>${String(err.message || err)}</small></div>`;
+    }
+  }
 }
+// Exponer explícitamente la navegación del docente para botones creados dinámicamente.
+window.irDocente = irDocente;
 
 /* ======================================================================
    ACTUALIZACIÓN EN VIVO ENTRE PESTAÑAS (mismo navegador)
@@ -1171,11 +1181,12 @@ function renderSidebar(){
     menu.innerHTML=`
       <div class="menu-item" onclick="renderHomeDashboard()">🏠 Inicio <span>›</span></div>
       <div class="menu-item" onclick="irDocente('horario')">Horario Actual <span>›</span></div>
-      <div class="menu-item" onclick="irDocente('notas')">Notas <span>›</span></div>
+      <div class="menu-item" id="menuNotasDocente">Notas <span>›</span></div>
       <div class="menu-item" onclick="irDocente('asistencia')">Asistencia <span>›</span></div>
       <div class="menu-item" onclick="irDocente('evaluacion')">Evaluación Docente Recibida <span>›</span></div>
       <div class="menu-item" onclick="irDocente('password')">Cambiar Contraseña <span>›</span></div>
     `;
+    document.getElementById('menuNotasDocente')?.addEventListener('click', ()=>window.irDocente('notas'));
     renderHomeDashboard();
   }
 }
@@ -1233,17 +1244,47 @@ function renderHomeDashboard(){
     ];
   }
 
-  const tilesHtml = tiles.map(t=>`
-    <div class="dashboard-tile" onclick="${t.accion}">
+  const tilesHtml = tiles.map((t,i)=>`
+    <button type="button" class="dashboard-tile" data-dashboard-action="${i}">
       <span class="icono">${t.icono}</span>
       <div class="etiqueta">${t.label}</div>
-    </div>
+    </button>
   `).join("");
 
   document.getElementById("contenido").innerHTML=`
     <h2 class="panel-title">Inicio</h2>
     <div class="dashboard-grid">${tilesHtml}</div>
   `;
+
+  // Delegación segura: las tarjetas se crean después de cada render, por lo que
+  // no dependemos de onclick inline ni de listeners que puedan quedar obsoletos.
+  document.querySelectorAll('[data-dashboard-action]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const i = Number(btn.dataset.dashboardAction);
+      const accion = tiles[i] && tiles[i].accion;
+      if(!accion) return;
+      if(typeof accion === 'string') {
+        try {
+          if(usuarioActual?.rol === 'docente') {
+            const mapa = {
+              'Horario Actual':'horario',
+              'Notas':'notas',
+              'Asistencia':'asistencia',
+              'Evaluación Docente Recibida':'evaluacion',
+              'Cambiar Contraseña':'password'
+            };
+            if(mapa[tiles[i].label]) return window.irDocente(mapa[tiles[i].label]);
+          }
+          // Fallback para los módulos históricos que todavía usan sus funciones existentes.
+          Function(accion)();
+        } catch(err){
+          console.error('Error al abrir tarjeta del dashboard:', err);
+          const c=document.getElementById('contenido');
+          if(c) c.innerHTML='<div class="aviso aviso-error"><b>No se pudo abrir esta sección.</b><br><small>'+String(err.message||err)+'</small></div>';
+        }
+      }
+    });
+  });
 }
 
 function toggleSidebarMobile(){
