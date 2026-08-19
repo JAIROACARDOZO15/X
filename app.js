@@ -978,17 +978,6 @@ function cambiarFoto(){
   setTimeout(()=>nota.remove(), 4000);
 }
 
-/* Escapa valores antes de insertarlos en atributos HTML.
-   Se usa en botones, selects e inputs creados dinámicamente. */
-function escAttr(valor){
-  return String(valor ?? '')
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/\"/g,'&quot;')
-    .replace(/'/g,'&#39;');
-}
-
 /* ======================================================================
    CONFIRMACIÓN Y AVISOS DENTRO DE LA PÁGINA
    (en vez de confirm()/alert(), que quedan bloqueados en algunos
@@ -1021,22 +1010,12 @@ function cancelarAccionPendiente(){
 
 function irDocente(vista){
   vistaDocenteActual = vista;
-  try{
-    if(vista==='horario') renderHorarioDocente();
-    else if(vista==='notas') renderNotasDocente();
-    else if(vista==='asistencia') renderAsistenciaDocente();
-    else if(vista==='evaluacion') renderEvaluacionRecibidaDocente();
-    else if(vista==='password') renderCambiarPasswordDocente();
-  }catch(err){
-    console.error('Error al abrir la vista docente:', vista, err);
-    const contenido = document.getElementById('contenido');
-    if(contenido){
-      contenido.innerHTML = `<div class="aviso aviso-error"><b>No se pudo abrir esta sección.</b><br><small>${String(err.message || err)}</small></div>`;
-    }
-  }
+  if(vista==='horario') renderHorarioDocente();
+  else if(vista==='notas') renderNotasDocente();
+  else if(vista==='asistencia') renderAsistenciaDocente();
+  else if(vista==='evaluacion') renderEvaluacionRecibidaDocente();
+  else if(vista==='password') renderCambiarPasswordDocente();
 }
-// Exponer explícitamente la navegación del docente para botones creados dinámicamente.
-window.irDocente = irDocente;
 
 /* ======================================================================
    ACTUALIZACIÓN EN VIVO ENTRE PESTAÑAS (mismo navegador)
@@ -1192,12 +1171,11 @@ function renderSidebar(){
     menu.innerHTML=`
       <div class="menu-item" onclick="renderHomeDashboard()">🏠 Inicio <span>›</span></div>
       <div class="menu-item" onclick="irDocente('horario')">Horario Actual <span>›</span></div>
-      <div class="menu-item" id="menuNotasDocente">Notas <span>›</span></div>
+      <div class="menu-item" onclick="irDocente('notas')">Notas <span>›</span></div>
       <div class="menu-item" onclick="irDocente('asistencia')">Asistencia <span>›</span></div>
       <div class="menu-item" onclick="irDocente('evaluacion')">Evaluación Docente Recibida <span>›</span></div>
       <div class="menu-item" onclick="irDocente('password')">Cambiar Contraseña <span>›</span></div>
     `;
-    document.getElementById('menuNotasDocente')?.addEventListener('click', ()=>window.irDocente('notas'));
     renderHomeDashboard();
   }
 }
@@ -1255,47 +1233,17 @@ function renderHomeDashboard(){
     ];
   }
 
-  const tilesHtml = tiles.map((t,i)=>`
-    <button type="button" class="dashboard-tile" data-dashboard-action="${i}">
+  const tilesHtml = tiles.map(t=>`
+    <div class="dashboard-tile" onclick="${t.accion}">
       <span class="icono">${t.icono}</span>
       <div class="etiqueta">${t.label}</div>
-    </button>
+    </div>
   `).join("");
 
   document.getElementById("contenido").innerHTML=`
     <h2 class="panel-title">Inicio</h2>
     <div class="dashboard-grid">${tilesHtml}</div>
   `;
-
-  // Delegación segura: las tarjetas se crean después de cada render, por lo que
-  // no dependemos de onclick inline ni de listeners que puedan quedar obsoletos.
-  document.querySelectorAll('[data-dashboard-action]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const i = Number(btn.dataset.dashboardAction);
-      const accion = tiles[i] && tiles[i].accion;
-      if(!accion) return;
-      if(typeof accion === 'string') {
-        try {
-          if(usuarioActual?.rol === 'docente') {
-            const mapa = {
-              'Horario Actual':'horario',
-              'Notas':'notas',
-              'Asistencia':'asistencia',
-              'Evaluación Docente Recibida':'evaluacion',
-              'Cambiar Contraseña':'password'
-            };
-            if(mapa[tiles[i].label]) return window.irDocente(mapa[tiles[i].label]);
-          }
-          // Fallback para los módulos históricos que todavía usan sus funciones existentes.
-          Function(accion)();
-        } catch(err){
-          console.error('Error al abrir tarjeta del dashboard:', err);
-          const c=document.getElementById('contenido');
-          if(c) c.innerHTML='<div class="aviso aviso-error"><b>No se pudo abrir esta sección.</b><br><small>'+String(err.message||err)+'</small></div>';
-        }
-      }
-    });
-  });
 }
 
 function toggleSidebarMobile(){
@@ -4583,7 +4531,8 @@ function estadoCentroNotas(){
     window.centroNotasDocente = {
       programa: programas[0] || "",
       materia: "",
-      grupoId: ""
+      grupoId: "",
+      vista: "lista"
     };
   }
   return window.centroNotasDocente;
@@ -4594,6 +4543,7 @@ function cambiarProgramaCentroNotas(programa){
   s.programa = programa || "";
   s.materia = "";
   s.grupoId = "";
+  s.vista = "lista";
   renderNotasDocente();
 }
 
@@ -4601,18 +4551,21 @@ function cambiarMateriaCentroNotas(materia){
   const s = estadoCentroNotas();
   s.materia = materia || "";
   s.grupoId = "";
+  s.vista = "lista";
   renderNotasDocente();
 }
 
 function abrirGrupoCentroNotas(grupoId){
   const s = estadoCentroNotas();
   s.grupoId = grupoId || "";
+  s.vista = "grupo";
   renderNotasDocente();
 }
 
 function volverGruposCentroNotas(){
   const s = estadoCentroNotas();
   s.grupoId = "";
+  s.vista = "lista";
   renderNotasDocente();
 }
 
@@ -4649,16 +4602,22 @@ function renderNotasDocente(){
     g => g.docente === usuarioActual.nombre
   );
 
+  // Nunca abras un grupo automáticamente. La pantalla de Notas debe empezar
+  // en "Mis grupos" para que el docente pueda elegir entre todas sus materias
+  // y grupos, incluso cuando una materia tenga un solo grupo.
   if(!grupos.some(g => g.id === s.grupoId)){
-    s.grupoId = grupos.length === 1 ? grupos[0].id : "";
+    s.grupoId = "";
   }
 
   const g = grupos.find(x => x.id === s.grupoId);
 
-  if(g){
+  if(s.vista === "grupo" && g){
     renderPanelGrupoCentroNotas(s.programa, s.materia, g);
     return;
   }
+
+  // Si llegamos a la lista por cualquier motivo, forzamos el estado de navegación.
+  s.vista = "lista";
 
   const cards = grupos.map(x => {
     const es = estudiantesDeGrupo(s.programa, s.materia, x.id);
@@ -4725,7 +4684,7 @@ function renderNotasDocente(){
         <div class="nc-select-grid">
           <label>
             <span>Programa académico</span>
-            <select id="ncPrograma">
+            <select id="ncPrograma" onchange="cambiarProgramaCentroNotas(this.value)">
               ${programas.map(p => `
                 <option value="${escAttr(p)}" ${p === s.programa ? "selected" : ""}>
                   ${p}
@@ -4735,7 +4694,7 @@ function renderNotasDocente(){
 
           <label>
             <span>Materia</span>
-            <select id="ncMateria">
+            <select id="ncMateria" onchange="cambiarMateriaCentroNotas(this.value)">
               ${materias.map(m => `
                 <option value="${escAttr(m)}" ${m === s.materia ? "selected" : ""}>
                   ${m} · ${(gp[m] || []).filter(x => x.docente === usuarioActual.nombre).length} grupo(s)
@@ -4749,7 +4708,7 @@ function renderNotasDocente(){
         <div>
           <span class="nc-eyebrow">MIS GRUPOS</span>
           <h2>${s.materia || "Mis materias"}</h2>
-          <p>${grupos.length} grupo(s) disponibles para este docente.</p>
+          <p>${grupos.length} grupo(s) disponibles para esta materia · ${materias.length} materia(s) asignada(s).</p>
         </div>
       </section>
 
