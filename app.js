@@ -522,14 +522,25 @@ async function sincronizarActasEvaluacionHistorialDesdeSupabase(){
 
 async function empujarActasASupabase(obj){
   if(!supabaseClient) return;
+
   try{
-    await supabaseClient.from("actas").delete().neq("grupo_id","___ninguno___");
-    const filas = Object.keys(obj).map(grupoId=>({grupo_id:grupoId, data:obj[grupoId]}));
-    if(filas.length){
-      const { error } = await supabaseClient.from("actas").insert(filas);
-      if(error) console.error("No se pudo guardar actas en Supabase:", error);
+    const filas = Object.keys(obj).map(grupoId => ({
+      grupo_id: grupoId,
+      data: obj[grupoId]
+    }));
+
+    if(!filas.length) return;
+
+    const { error } = await supabaseClient
+      .from("actas")
+      .upsert(filas, { onConflict: "grupo_id" });
+
+    if(error){
+      console.error("No se pudo guardar actas en Supabase:", error);
     }
-  }catch(err){ console.error("No se pudo guardar actas en Supabase:", err); }
+  }catch(err){
+    console.error("No se pudo guardar actas en Supabase:", err);
+  }
 }
 async function empujarConfigEvaluacionASupabase(obj){
   if(!supabaseClient) return;
@@ -571,16 +582,32 @@ async function empujarEvaluacionPendienteASupabase(obj){
 }
 async function empujarHistorialASupabase(obj){
   if(!supabaseClient) return;
+
   try{
-    await supabaseClient.from("historial_academico").delete().neq("codigo","___ninguno___");
-    const filas = Object.keys(obj).map(codigo=>({codigo, data:obj[codigo]}));
-    if(filas.length){
-      const { error } = await supabaseClient.from("historial_academico").insert(filas);
-      if(error) console.error("No se pudo guardar historial_academico en Supabase:", error);
+    const filas = Object.keys(obj).map(codigo => ({
+      codigo: codigo,
+      data: obj[codigo]
+    }));
+
+    if(!filas.length) return;
+
+    const { error } = await supabaseClient
+      .from("historial_academico")
+      .upsert(filas, { onConflict: "codigo" });
+
+    if(error){
+      console.error(
+        "No se pudo guardar historial_academico en Supabase:",
+        error
+      );
     }
-  }catch(err){ console.error("No se pudo guardar historial_academico en Supabase:", err); }
-}
-async function empujarNivelesEstudiantesASupabase(obj){
+  }catch(err){
+    console.error(
+      "No se pudo guardar historial_academico en Supabase:",
+      err
+    );
+  }
+}async function empujarNivelesEstudiantesASupabase(obj){
   if(!supabaseClient) return;
   try{
     await supabaseClient.from("nivel_estudiante").delete().neq("codigo","___ninguno___");
