@@ -4556,6 +4556,7 @@ function cambiarProgramaCentroNotas(programa){
   s.programa = programa || "";
   s.materia = "";
   s.grupoId = "";
+  s.verListaGrupos = false;
   renderNotasDocente();
 }
 
@@ -4563,18 +4564,21 @@ function cambiarMateriaCentroNotas(materia){
   const s = estadoCentroNotas();
   s.materia = materia || "";
   s.grupoId = "";
+  s.verListaGrupos = false;
   renderNotasDocente();
 }
 
 function abrirGrupoCentroNotas(grupoId){
   const s = estadoCentroNotas();
   s.grupoId = grupoId || "";
+  s.verListaGrupos = false;
   renderNotasDocente();
 }
 
 function volverGruposCentroNotas(){
   const s = estadoCentroNotas();
   s.grupoId = "";
+  s.verListaGrupos = true;
   renderNotasDocente();
 }
 
@@ -4612,7 +4616,7 @@ function renderNotasDocente(){
   );
 
   if(!grupos.some(g => g.id === s.grupoId)){
-    s.grupoId = grupos.length === 1 ? grupos[0].id : "";
+    s.grupoId = (grupos.length === 1 && !s.verListaGrupos) ? grupos[0].id : "";
   }
 
   const g = grupos.find(x => x.id === s.grupoId);
