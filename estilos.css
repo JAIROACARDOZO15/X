@@ -359,3 +359,278 @@ html,body{font-family:var(--uan-ui),Arial,sans-serif}
   .login-box-uan{padding:34px 22px 24px;border-radius:18px}
   .login-box-uan h2{font-size:32px}
 }
+
+/* ================================================================
+   UAN INTEGRA — SISTEMA INTERNO V10
+   La identidad visual de la portada se extiende al panel académico.
+   ================================================================ */
+
+:root{
+  --uan-bg:#eef2ef;
+  --uan-surface:#ffffff;
+  --uan-surface-2:#f7f9f7;
+  --uan-ink:#102019;
+  --uan-muted:#6d7c74;
+  --uan-line:#dce4de;
+  --uan-green-dark:#092a1c;
+  --uan-green-2:#174d31;
+  --uan-green-3:#2e8b57;
+  --uan-gold-2:#c99a2e;
+  --uan-shadow:0 18px 45px rgba(10,38,25,.09);
+  --uan-shadow-soft:0 8px 24px rgba(10,38,25,.07);
+}
+
+/* ---------- PORTADA: una sola pantalla, sin scroll ---------- */
+html,body{min-height:100%;}
+body{background:var(--uan-bg);color:var(--uan-ink);}
+body:has(#inicio.inicio-uan){overflow:hidden;}
+#inicio.inicio-uan{height:100dvh;min-height:0;max-height:100dvh;overflow:hidden;}
+.uan-hero-shell{height:100dvh;min-height:0;max-height:100dvh;overflow:hidden;}
+.uan-hero-image{width:100%;height:100%;min-height:0;max-height:none;object-fit:cover;object-position:center center;}
+.hero-access-hint{bottom:1.6%;}
+
+/* ---------- PANEL INTERNO ---------- */
+#dashboard{
+  min-height:100dvh;
+  background:
+    radial-gradient(circle at 85% 0%,rgba(46,139,87,.06),transparent 28%),
+    linear-gradient(180deg,#f7f9f7 0%,#edf1ee 100%);
+  color:var(--uan-ink);
+  font-family:var(--uan-ui),Arial,sans-serif;
+}
+
+#dashboard .topbar{
+  height:68px;
+  padding:0 28px;
+  position:sticky;
+  top:0;
+  z-index:80;
+  background:linear-gradient(100deg,#06170f 0%,#0d3823 48%,#092219 100%);
+  border-bottom:1px solid rgba(217,169,54,.28);
+  box-shadow:0 8px 25px rgba(2,17,10,.18);
+}
+#dashboard .topbar>div:first-child,
+#dashboard .topbar>div:last-child{height:100%;}
+#dashboard .topbar .brand{
+  font-family:var(--uan-ui);
+  font-size:15px;
+  font-weight:700;
+  letter-spacing:.01em;
+}
+#dashboard .topbar-icon{color:#dfeee5;transition:.2s ease;}
+#dashboard .topbar-icon:hover{color:#e0b54b;transform:translateY(-1px);}
+#dashboard .logo-mini{
+  min-width:40px;text-align:center;padding:7px 9px;border-radius:9px;
+  background:linear-gradient(145deg,#fff,#edf3ee);
+  color:#174d31;border:1px solid rgba(217,169,54,.55);
+  box-shadow:inset 0 1px #fff,0 3px 10px rgba(0,0,0,.12);
+  font-family:var(--uan-mono);
+}
+#topbarUsuario{color:#e8f0eb!important;font-family:var(--uan-mono);font-size:11px!important;}
+
+#dashboard .topbar-buscar{
+  margin:14px 28px 0 300px;
+  max-width:none;
+  width:calc(100% - 328px);
+  height:48px;
+  padding:0 16px;
+  border-radius:14px;
+  background:rgba(255,255,255,.88);
+  border:1px solid var(--uan-line);
+  box-shadow:var(--uan-shadow-soft);
+  color:#4d6558;
+}
+#dashboard .topbar-buscar input{height:34px;margin:0;color:#35463e;font-family:var(--uan-ui);}
+
+#dashboard .sidebar{
+  position:fixed;
+  left:0;
+  top:0;
+  bottom:0;
+  z-index:90;
+  width:270px;
+  min-height:100dvh;
+  float:none;
+  overflow-y:auto;
+  padding:92px 15px 18px;
+  background:
+    radial-gradient(circle at 50% 5%,rgba(77,178,102,.13),transparent 25%),
+    linear-gradient(180deg,#0a2116 0%,#0a1b15 55%,#07140f 100%);
+  border-right:1px solid rgba(217,169,54,.20);
+  box-shadow:12px 0 35px rgba(2,17,10,.10);
+}
+#dashboard .sidebar:before{
+  content:"UAN  /  INTEGRA";
+  position:absolute;
+  top:25px;left:20px;
+  color:rgba(224,181,75,.8);
+  font:600 9px var(--uan-mono);
+  letter-spacing:.16em;
+}
+#dashboard .sidebar .userbox{
+  padding:8px 10px 18px;
+  margin-bottom:14px;
+  border-bottom:1px solid rgba(255,255,255,.10);
+}
+#dashboard .sidebar .userbox img{
+  width:78px;height:78px;
+  border:2px solid rgba(217,169,54,.72);
+  box-shadow:0 0 0 5px rgba(217,169,54,.06),0 10px 30px rgba(0,0,0,.24);
+}
+#dashboard .sidebar .userbox .rol{color:#9fc4ad;font-family:var(--uan-mono);font-size:10px;letter-spacing:.04em;}
+#dashboard .sidebar .userbox .codigo{color:#6f9c7d;font-family:var(--uan-mono);font-size:10px;}
+#dashboard .sidebar .userbox .nombre{font-family:var(--uan-display);font-size:19px;color:#fff;margin-top:6px;}
+#dashboard .sidebar h3{font-family:var(--uan-mono)!important;color:#dcb454!important;text-transform:uppercase;letter-spacing:.13em;border-bottom:1px solid rgba(255,255,255,.10)!important;padding:8px 8px 10px!important;}
+#dashboard .menu-item{
+  margin:4px 0;
+  padding:12px 11px;
+  border:1px solid transparent;
+  border-radius:10px;
+  color:#e6efe9;
+  font-size:13px;
+  transition:background .18s,border-color .18s,transform .18s;
+}
+#dashboard .menu-item:hover{
+  background:rgba(74,163,94,.10);
+  border-color:rgba(217,169,54,.18);
+  transform:translateX(2px);
+}
+#dashboard .sub{background:rgba(0,0,0,.16);border-radius:10px;}
+#dashboard .sub div{border-bottom:1px solid rgba(255,255,255,.06);color:#bdd1c3;}
+#dashboard .sub div:hover{background:rgba(74,163,94,.12);color:#fff;}
+#dashboard .logout-btn{margin-top:18px!important;border:1px solid rgba(255,255,255,.08)!important;border-radius:10px!important;background:linear-gradient(135deg,#87342f,#ad403a)!important;box-shadow:0 8px 18px rgba(110,31,28,.18);}
+#dashboard .logout-btn:hover{background:linear-gradient(135deg,#a13a34,#c04a43)!important;}
+
+#dashboard .content{
+  margin-left:270px;
+  padding:34px 36px 48px;
+  min-height:calc(100dvh - 130px);
+  overflow-x:auto;
+}
+#dashboard .panel-title{
+  color:var(--uan-green-dark);
+  border-bottom:0;
+  margin:0 0 20px;
+  padding:0 0 14px;
+  font-family:var(--uan-display);
+  font-size:32px;
+  font-weight:600;
+  position:relative;
+}
+#dashboard .panel-title:after{
+  content:"";display:block;width:68px;height:3px;margin-top:12px;
+  background:linear-gradient(90deg,var(--uan-gold-2),transparent);
+}
+
+/* ---------- TARJETAS Y PANELES ---------- */
+#dashboard .dashboard-grid{gap:18px;margin-top:14px;}
+#dashboard .dashboard-tile,
+#dashboard .tarjeta-grupo-notas{
+  background:rgba(255,255,255,.88);
+  border:1px solid var(--uan-line);
+  border-radius:18px;
+  box-shadow:var(--uan-shadow-soft);
+}
+#dashboard .dashboard-tile{padding:26px 14px;}
+#dashboard .dashboard-tile:hover{transform:translateY(-4px);box-shadow:var(--uan-shadow);border-color:rgba(46,139,87,.28);}
+#dashboard .dashboard-tile .icono{font-size:36px;}
+#dashboard .dashboard-tile .etiqueta{font-family:var(--uan-mono);font-size:11px;letter-spacing:.10em;color:#234434;}
+
+#dashboard table{
+  border:1px solid var(--uan-line);
+  border-radius:14px;
+  overflow:hidden;
+  box-shadow:0 6px 20px rgba(10,38,25,.05);
+}
+#dashboard th{
+  background:linear-gradient(90deg,#123e28,#1b5a36);
+  color:#fff;
+  border-color:#285d3e;
+  font-family:var(--uan-mono);
+  font-size:11px;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+}
+#dashboard td{border-color:#e4e9e5;background:#fff;}
+#dashboard tr:hover td{background:#f6faf7;}
+#dashboard .add-btn{background:linear-gradient(135deg,#237345,#319057);border-radius:9px;}
+#dashboard .btn-secundario{border-radius:9px;}
+#dashboard select,#dashboard input,#dashboard textarea{
+  border:1px solid #d5dfd8;
+  background:#fbfcfb;
+  border-radius:9px;
+  transition:border-color .18s,box-shadow .18s;
+}
+#dashboard select:focus,#dashboard input:focus,#dashboard textarea:focus{
+  outline:none;border-color:#55a66f;box-shadow:0 0 0 3px rgba(46,139,87,.10);
+}
+#dashboard button{border-radius:9px;transition:.18s ease;}
+#dashboard button:hover{transform:translateY(-1px);}
+
+/* ---------- MENSAJES / BADGES ---------- */
+#dashboard .aviso{border-radius:12px;padding:13px 15px;box-shadow:0 4px 14px rgba(0,0,0,.03);}
+#dashboard .badge{font-family:var(--uan-mono);letter-spacing:.03em;}
+
+/* ---------- MODALES INTERNOS ---------- */
+#dashboard + .modal-fondo,
+.modal-fondo{
+  background:rgba(4,17,11,.68);
+  backdrop-filter:blur(6px);
+  padding:22px;
+}
+.modal-caja{
+  max-width:900px;
+  border:1px solid rgba(217,169,54,.25);
+  border-radius:20px;
+  box-shadow:0 30px 90px rgba(0,0,0,.35);
+}
+.modal-caja h2,.modal-caja h3{font-family:var(--uan-display);color:var(--uan-green-dark);}
+
+/* ---------- NOTAS DEL DOCENTE ---------- */
+#dashboard .tarjeta-grupo-notas{
+  padding:20px 22px;
+  margin-bottom:18px;
+}
+#dashboard .tarjeta-grupo-notas h3{font-family:var(--uan-display);font-size:22px;}
+#dashboard .barra-suma-items{background:#e8eee9;border-radius:10px;}
+#dashboard .chip-item{background:#edf6ef;border-color:#d2e5d5;color:#1e6339;}
+#dashboard .tabla-notas-docente th{background:linear-gradient(90deg,#123e28,#1d613b);}
+#dashboard .input-nota{border-color:#d2ddd5;background:#fff;}
+
+/* ---------- VISTAS DE GRUPOS / CONFIGURACIÓN ---------- */
+#dashboard .nc-group,
+#dashboard .nc-config-wide,
+#dashboard .nc-btn,
+#dashboard .nc-delete{font-family:var(--uan-ui);}
+#dashboard .nc-group{
+  background:#fff!important;border:1px solid var(--uan-line)!important;border-radius:14px!important;
+  box-shadow:0 5px 18px rgba(10,38,25,.05);
+}
+
+/* ---------- RESPONSIVE ---------- */
+@media(max-width:1000px){
+  #dashboard .sidebar{width:235px;}
+  #dashboard .content{margin-left:235px;padding:28px 22px 40px;}
+  #dashboard .topbar-buscar{margin-left:255px;width:calc(100% - 278px);}
+}
+@media(max-width:700px){
+  body:has(#inicio.inicio-uan){overflow:hidden;}
+  #inicio.inicio-uan,.uan-hero-shell{height:100dvh;min-height:100dvh;max-height:100dvh;}
+  .uan-hero-image{height:100%;min-height:100%;object-fit:cover;object-position:center center;}
+
+  #dashboard .topbar{height:60px;padding:0 14px;}
+  #dashboard .topbar .brand{font-size:12px;}
+  #dashboard .topbar-buscar{margin:10px 12px;width:calc(100% - 24px);height:44px;}
+  #dashboard .sidebar{position:fixed;top:60px;bottom:0;left:0;width:280px;padding-top:20px;transform:translateX(-105%);transition:transform .22s ease;}
+  #dashboard .sidebar.mostrar-movil{display:block;transform:translateX(0);}
+  #dashboard .content{margin-left:0;padding:24px 14px 36px;}
+  #dashboard .panel-title{font-size:27px;}
+  #dashboard .dashboard-grid{grid-template-columns:1fr 1fr;gap:10px;}
+  #dashboard .dashboard-tile{padding:20px 8px;}
+  #dashboard .dashboard-tile .icono{font-size:28px;}
+}
+@media(max-width:480px){
+  #dashboard .dashboard-grid{grid-template-columns:1fr;}
+  #dashboard .brand{display:none;}
+  .uan-hero-image{object-position:62% center;}
+}
