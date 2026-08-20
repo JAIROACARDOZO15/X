@@ -3,52 +3,43 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>UAN Sistema Académico</title>
-<link rel="stylesheet" href="estilos.css?v=4">
+<meta name="theme-color" content="#07130f">
+<title>Universidad Autónoma Nacional · Plataforma Integra</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilos.css?v=9">
 </head>
-
 <body>
 
-<!-- ================= INICIO ================= -->
-<div id="inicio">
-  <div class="logo-box">
-    <div class="logo-uan">UAN</div>
-  </div>
-  <h1 class="titulo">UNIVERSIDAD AUTÓNOMA NACIONAL</h1>
-  <p class="subtitulo">Plataforma Académica Integra UAN</p>
+<!-- ================= INICIO INSTITUCIONAL ================= -->
+<div id="inicio" class="inicio-uan">
+  <div class="uan-hero-shell" aria-label="Portal institucional de la Universidad Autónoma Nacional">
+    <img class="uan-hero-image" src="uan-hero.png" alt="Campus de la Universidad Autónoma Nacional al atardecer">
 
-  <div class="cards">
-    <div class="card admin" onclick="mostrarLogin('admin')">
-      <span class="icon">🛠️</span>
-      <div class="titulo-card">ADMINISTRATIVOS</div>
-      <div class="desc">Admisiones, Dirección de Escuela y Coordinación</div>
-    </div>
-    <div class="card doc" onclick="mostrarLogin('doc')">
-      <span class="icon">📋</span>
-      <div class="titulo-card">DOCENTES</div>
-      <div class="desc">Acceso para docentes y profesores</div>
-    </div>
-    <div class="card est" onclick="mostrarLogin('est')">
-      <span class="icon">🎓</span>
-      <div class="titulo-card">ESTUDIANTES</div>
-      <div class="desc">Acceso para estudiantes</div>
-    </div>
-  </div>
+    <!-- Hotspots invisibles: la imagen conserva el diseño visual y estas zonas hacen los accesos realmente interactivos. -->
+    <button class="role-hotspot hotspot-admin" type="button" aria-label="Ingresar como administrativo" onclick="mostrarLogin('admin')"></button>
+    <button class="role-hotspot hotspot-doc" type="button" aria-label="Ingresar como docente" onclick="mostrarLogin('doc')"></button>
+    <button class="role-hotspot hotspot-est" type="button" aria-label="Ingresar como estudiante" onclick="mostrarLogin('est')"></button>
 
-  <div class="footer-nota">
-    🔒 Este sistema protege los datos personales de acuerdo con la normativa de protección de datos vigente.
+    <div class="hero-access-hint" aria-hidden="true">Selecciona tu perfil para ingresar</div>
   </div>
 </div>
 
 <!-- ================= LOGIN ================= -->
-<div id="login">
-  <div class="login-box">
+<div id="login" class="login-uan">
+  <div class="login-backdrop"></div>
+  <div class="login-box login-box-uan">
+    <div class="login-brand-mark">UAN</div>
+    <div class="login-kicker">ACCESO INSTITUCIONAL</div>
     <h2>Iniciar sesión</h2>
-    <input id="user" placeholder="Usuario / Código">
-    <input id="pass" type="password" placeholder="Contraseña">
-    <div id="loginError" style="color:#a83232;font-size:13px;min-height:16px"></div>
-    <button onclick="login()">Entrar</button>
-    <button class="volver" onclick="volverInicio()">← Volver</button>
+    <p class="login-subtitle">Universidad Autónoma Nacional · Plataforma Integra</p>
+    <input id="user" placeholder="Usuario / Código" autocomplete="username">
+    <input id="pass" type="password" placeholder="Contraseña" autocomplete="current-password">
+    <div id="loginError" class="login-error" aria-live="polite"></div>
+    <button class="login-main-btn" onclick="login()">Entrar al sistema <span>→</span></button>
+    <button class="volver login-back-btn" onclick="volverInicio()">← Volver al portal</button>
+    <div class="login-status">● SISTEMA ACTIVO · DATOS CIFRADOS</div>
   </div>
 </div>
 
@@ -76,11 +67,8 @@
       <div class="nombre" id="nombreTexto"></div>
       <button class="cambiar-foto" id="btnCambiarFoto" onclick="cambiarFoto()" style="display:none">Cambiar foto personal</button>
     </div>
-
     <h3 style="font-size:14px;border-bottom:1px solid #33475a;padding-bottom:6px">Opciones</h3>
-
     <div id="menuDinamico"></div>
-
     <button class="logout-btn btn-peligro" onclick="logout()">Salir</button>
   </div>
 
@@ -97,7 +85,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="app.js?v=8"></script>
-
+<script src="app.js?v=9"></script>
 </body>
 </html>

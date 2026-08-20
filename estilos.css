@@ -182,3 +182,180 @@ th{background:#eef3ee}
 .nc-btn,.nc-delete{width:auto;margin:0}
 .nc-group{line-height:1.35}
 .nc-config-wide input,.nc-config-wide select,.nc-config-wide button{box-sizing:border-box}
+
+/* ================================================================
+   PORTAL INSTITUCIONAL UAN — REDISEÑO V9
+   La portada utiliza la composición cinematográfica uan-hero.png
+   como pieza visual principal y hotspots accesibles para los roles.
+   ================================================================ */
+:root{
+  --uan-black:#07130f;
+  --uan-deep:#0b1c16;
+  --uan-green:#2e8b57;
+  --uan-green-bright:#54bd68;
+  --uan-gold:#d9a936;
+  --uan-white:#f7f5ed;
+  --uan-mono:'JetBrains Mono',Consolas,monospace;
+  --uan-ui:'Space Grotesk',Arial,sans-serif;
+  --uan-display:'Fraunces',Georgia,serif;
+}
+
+html,body{font-family:var(--uan-ui),Arial,sans-serif}
+
+/* PORTADA */
+#inicio.inicio-uan{
+  display:block;
+  min-height:100vh;
+  width:100%;
+  padding:0;
+  background:#030806;
+  overflow:hidden;
+}
+.uan-hero-shell{
+  position:relative;
+  width:100%;
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#030806;
+}
+.uan-hero-image{
+  display:block;
+  width:100%;
+  height:auto;
+  min-height:100vh;
+  object-fit:cover;
+  object-position:center center;
+  user-select:none;
+  -webkit-user-drag:none;
+}
+.role-hotspot{
+  position:absolute;
+  z-index:4;
+  display:block;
+  padding:0;
+  margin:0;
+  border:1px solid transparent;
+  border-radius:18px;
+  background:transparent;
+  cursor:pointer;
+  transition:background .2s ease,border-color .2s ease,box-shadow .2s ease,transform .2s ease;
+}
+.role-hotspot:hover,.role-hotspot:focus-visible{
+  background:rgba(60,190,105,.08);
+  border-color:rgba(119,226,136,.7);
+  box-shadow:0 0 0 1px rgba(255,255,255,.12),0 0 34px rgba(67,183,92,.18) inset;
+  outline:none;
+}
+.hotspot-admin{left:13.1%;top:47.0%;width:23.2%;height:35.8%}
+.hotspot-doc{left:38.0%;top:47.0%;width:23.6%;height:35.8%}
+.hotspot-est{left:63.0%;top:47.0%;width:24.0%;height:35.8%}
+.hero-access-hint{
+  position:absolute;
+  left:50%;
+  bottom:2.4%;
+  transform:translateX(-50%);
+  z-index:5;
+  font:600 10px/1 var(--uan-mono);
+  letter-spacing:.13em;
+  text-transform:uppercase;
+  color:rgba(255,255,255,.45);
+  pointer-events:none;
+  opacity:0;
+  transition:opacity .25s ease;
+}
+.uan-hero-shell:hover .hero-access-hint{opacity:1}
+
+/* LOGIN */
+#login.login-uan{
+  position:relative;
+  display:none;
+  min-height:100vh;
+  padding:24px;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+  background:
+    radial-gradient(circle at 50% 30%,rgba(48,139,87,.24),transparent 38%),
+    linear-gradient(135deg,#030806,#0c1d15 55%,#07110d);
+  font-family:var(--uan-ui),Arial,sans-serif;
+}
+.login-backdrop{
+  position:absolute;
+  inset:0;
+  background-image:linear-gradient(rgba(3,8,6,.62),rgba(3,8,6,.78)),url('uan-hero.png');
+  background-size:cover;
+  background-position:center;
+  filter:blur(2px);
+  transform:scale(1.04);
+}
+.login-box-uan{
+  position:relative;
+  z-index:2;
+  width:min(430px,100%);
+  padding:42px 38px 30px;
+  border-radius:24px;
+  border:1px solid rgba(217,169,54,.36);
+  background:rgba(7,19,15,.92);
+  color:#fff;
+  box-shadow:0 28px 80px rgba(0,0,0,.55),inset 0 1px rgba(255,255,255,.06);
+  backdrop-filter:blur(18px);
+  text-align:center;
+}
+.login-brand-mark{
+  width:66px;height:66px;margin:0 auto 18px;
+  display:flex;align-items:center;justify-content:center;
+  border:1px solid rgba(217,169,54,.7);
+  border-radius:50%;
+  color:var(--uan-gold);
+  font:700 16px var(--uan-mono);
+  letter-spacing:.05em;
+}
+.login-kicker{font:600 10px var(--uan-mono);letter-spacing:.16em;color:var(--uan-green-bright)}
+.login-box-uan h2{font:600 38px var(--uan-display);color:#fff;margin:10px 0 4px}
+.login-subtitle{margin:0 0 22px;color:rgba(255,255,255,.62);font-size:13px}
+.login-box-uan input{
+  width:100%;margin:7px 0;padding:14px 15px;border-radius:10px;
+  border:1px solid rgba(255,255,255,.13);background:rgba(255,255,255,.055);
+  color:#fff;font-family:var(--uan-ui);outline:none;
+}
+.login-box-uan input:focus{border-color:rgba(84,189,104,.8);box-shadow:0 0 0 3px rgba(84,189,104,.1)}
+.login-box-uan input::placeholder{color:rgba(255,255,255,.42)}
+.login-main-btn{
+  width:100%;margin-top:12px;padding:14px 16px;border-radius:10px;
+  background:linear-gradient(135deg,#277847,#3b9e59);color:#fff;
+  font:700 13px var(--uan-ui);letter-spacing:.04em;
+  border:1px solid rgba(119,226,136,.25);
+}
+.login-main-btn span{float:right;font-size:18px;line-height:12px}
+.login-main-btn:hover{background:linear-gradient(135deg,#318a50,#4aaa62);transform:translateY(-1px)}
+.login-back-btn{width:100%;color:rgba(255,255,255,.66)!important;text-decoration:none!important;background:transparent!important;margin-top:10px}
+.login-error{color:#ff9c9c;font:500 12px var(--uan-mono);min-height:18px;margin-top:4px}
+.login-status{margin-top:22px;color:rgba(255,255,255,.4);font:500 9px var(--uan-mono);letter-spacing:.08em}
+
+/* DASHBOARD: pequeño ajuste para que conserve la nueva identidad */
+.topbar{background:linear-gradient(90deg,#071a12,#175a34,#071a12);font-family:var(--uan-ui)}
+.topbar .brand{letter-spacing:.01em}
+.logo-mini{border:1px solid rgba(217,169,54,.5);color:#183b28}
+.panel-title{font-family:var(--uan-display);font-weight:600}
+
+@media(max-width:900px){
+  .uan-hero-shell{min-height:100svh;overflow:auto;background:#030806}
+  .uan-hero-image{min-height:100svh;height:100svh;object-fit:cover;object-position:center}
+  .hotspot-admin{left:13%;top:47.5%;width:23.5%;height:35%}
+  .hotspot-doc{left:38%;top:47.5%;width:24%;height:35%}
+  .hotspot-est{left:63%;top:47.5%;width:24%;height:35%}
+}
+@media(max-width:600px){
+  /* En móviles se prioriza la legibilidad: el campus sigue siendo el fondo,
+     mientras las tres zonas de acceso ocupan una franja más fácil de tocar. */
+  .uan-hero-image{object-position:center top}
+  .hotspot-admin,.hotspot-doc,.hotspot-est{left:8%;width:84%;height:11%;}
+  .hotspot-admin{top:60%}
+  .hotspot-doc{top:72%}
+  .hotspot-est{top:84%}
+  .hero-access-hint{display:none}
+  .login-box-uan{padding:34px 22px 24px;border-radius:18px}
+  .login-box-uan h2{font-size:32px}
+}
