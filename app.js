@@ -4506,6 +4506,38 @@ function calcularDefinitivaGrupo(grupoId, codigo){
    eliminarItemEvaluacion/subirActas/reabrirActas (el coordinador desde su panel
    de "Corrección de Notas"). Este helper vuelve a dibujar la pantalla correcta
    según quién esté conectado. */
+/* ----------------------------------------------------------------------
+   DETECCIÓN DE "PUBLICACIÓN A MEDIAS": intentarPublicarHistorial() se salta
+   en silencio a cualquier estudiante sin ninguna nota registrada (o, en
+   materias Teórico/Práctico, mientras falte cerrar el otro componente).
+   Este helper encuentra esos casos DESPUÉS de que el acta ya quedó marcada
+   como publicada, para poder avisar en pantalla en vez de dejarlo pasar
+   sin que nadie se entere — que es justo lo que se estaba viendo como
+   "la nota no se refleja" en Avance Plan de Estudios de algunos estudiantes.
+   ---------------------------------------------------------------------- */
+function estudiantesSinHistorialTrasActa(programaNombre, materia, estudiantes){
+  const dataPrograma = getProgramas()[programaNombre] || {};
+  const tipoInfo = (dataPrograma.tipos||{})[materia];
+  const actas = getActas();
+  const matriculas = getMatriculas();
+  const historial = getHistorial();
+
+  return estudiantes.filter(e=>{
+    const reg = matriculas[e.codigo];
+    if(!reg || !reg.materias || reg.materias[materia]===undefined) return false;
+    const asign = reg.materias[materia];
+
+    const actasCompletas = (tipoInfo && tipoInfo.tp)
+      ? !!(actas[asign.Teorico] && actas[asign.Practico])
+      : !!actas[asign];
+
+    if(!actasCompletas) return false; // aún falta cerrar algo, no es un error todavía
+
+    const yaPublicado = !!((historial[e.codigo]||{})[materia]);
+    return !yaPublicado;
+  });
+}
+
 function renderVistaNotasActual(){
   if(usuarioActual.rol === "coordinador") renderNotasCoordinador();
   else renderNotasDocente();
@@ -4622,9 +4654,14 @@ function intentarPublicarHistorial(programaNombre, materia, codigo){
 }
 
 function subirActas(programaNombre, grupoId, materia){
-  pedirConfirmacion("Vas a subir las actas de \"" + materia + "\" — " + "las notas quedarán oficiales en el historial de cada estudiante. ¿Continuar?", function(){
-    const estudiantes = estudiantesDeGrupo(programaNombre, materia, grupoId);
+  const estudiantes = estudiantesDeGrupo(programaNombre, materia, grupoId);
 
+  const sinNingunaNota = estudiantes.filter(e=>!calcularDefinitivaGrupo(grupoId, e.codigo));
+  const advertencia = sinNingunaNota.length
+    ? `<br><br>⚠ <b>Atención:</b> ${sinNingunaNota.length} estudiante(s) no tienen ninguna nota registrada en este grupo y por eso NO les quedará nota oficial en su historial hasta que les registres al menos una nota y publiques de nuevo: ${sinNingunaNota.map(e=>escAttr(e.nombre)).join(", ")}.`
+    : "";
+
+  pedirConfirmacion("Vas a subir las actas de \"" + materia + "\" — " + "las notas quedarán oficiales en el historial de cada estudiante." + advertencia + " ¿Continuar?", function(){
     const actas = getActas();
     actas[grupoId] = true;
     saveActas(actas);
@@ -4758,6 +4795,7 @@ function renderNotasDocente(){
 
     const pct = es.length ? Math.round(done / es.length * 100) : 0;
     const acta = !!actas[x.id];
+    const sinHist = acta ? estudiantesSinHistorialTrasActa(s.programa, s.materia, es) : [];
     const componente = x.componente
       ? (x.componente === "Teorico" ? "Teórico" : "Práctico")
       : "Grupo regular";
@@ -4785,9 +4823,11 @@ function renderNotasDocente(){
 
         <div class="nc-group-foot">
           <span>${x.horario || "Horario no registrado"}</span>
-          ${acta
-            ? '<b class="nc-chip ok">✓ Acta subida</b>'
-            : '<b class="nc-chip">● En edición</b>'}
+          ${sinHist.length
+            ? `<b class="nc-chip" style="background:#fdecea;color:#a83232;border-color:#f0c4be">⚠ ${sinHist.length} sin reflejar</b>`
+            : (acta
+              ? '<b class="nc-chip ok">✓ Acta subida</b>'
+              : '<b class="nc-chip">● En edición</b>')}
         </div>
       </button>`;
   }).join("");
@@ -4942,6 +4982,7 @@ function renderNotasCoordinador(){
 
     const pct = es.length ? Math.round(done / es.length * 100) : 0;
     const acta = !!actas[x.id];
+    const sinHist = acta ? estudiantesSinHistorialTrasActa(programaNombre, s.materia, es) : [];
     const componente = x.componente
       ? (x.componente === "Teorico" ? "Teórico" : "Práctico")
       : "Grupo regular";
@@ -4969,9 +5010,11 @@ function renderNotasCoordinador(){
 
         <div class="nc-group-foot">
           <span>${x.horario || "Horario no registrado"}</span>
-          ${acta
-            ? '<b class="nc-chip ok">✓ Acta subida</b>'
-            : '<b class="nc-chip">● En edición</b>'}
+          ${sinHist.length
+            ? `<b class="nc-chip" style="background:#fdecea;color:#a83232;border-color:#f0c4be">⚠ ${sinHist.length} sin reflejar</b>`
+            : (acta
+              ? '<b class="nc-chip ok">✓ Acta subida</b>'
+              : '<b class="nc-chip">● En edición</b>')}
         </div>
       </button>`;
   }).join("");
@@ -5657,6 +5700,12 @@ function renderPanelGrupoCentroNotas(programa,materia,g,opts){
   const pct=es.length?Math.round(complete/es.length*100):0;
   const puede=peso===100 && es.length && !soloLectura;
 
+  // Estudiantes cuya acta ya está publicada pero que, por no tener ninguna nota
+  // registrada (o por faltarles el otro componente en materias T/P), nunca
+  // recibieron su nota oficial en el historial — la causa típica de "la nota no
+  // se refleja en Avance Plan de Estudios".
+  const sinHistorial = acta ? estudiantesSinHistorialTrasActa(programa, materia, es) : [];
+
   const filas=es.map(e=>{
     const n=((ns[g.id]||{})[e.codigo])||{};
     const d=parseFloat(calcularDefinitivaGrupo(g.id,e.codigo));
@@ -5713,6 +5762,15 @@ function renderPanelGrupoCentroNotas(programa,materia,g,opts){
         <div class="aviso aviso-error">
           🔒 La fecha límite para cargar/corregir notas (<b>${fechaLimite}</b>) ya venció.
           Si necesitas hacer un cambio, contacta a Coordinación Académica.
+        </div>` : ""}
+
+      ${sinHistorial.length ? `
+        <div class="aviso aviso-error">
+          ⚠ El acta está publicada, pero <b>${sinHistorial.length} estudiante(s)</b> quedaron
+          SIN nota oficial reflejada en su Avance Plan de Estudios (nunca se les registró
+          ninguna calificación en este grupo): <b>${sinHistorial.map(e=>escAttr(e.nombre)).join(", ")}</b>.
+          Regístrales al menos una nota y usa <b>Reabrir acta</b> → <b>Cerrar y publicar acta</b>
+          de nuevo para que quede reflejada.
         </div>` : ""}
 
       <section class="nc-head">
