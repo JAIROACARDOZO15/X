@@ -634,3 +634,22 @@ body:has(#inicio.inicio-uan){overflow:hidden;}
   #dashboard .brand{display:none;}
   .uan-hero-image{object-position:62% center;}
 }
+
+
+/* ================================================================
+   FIX V10.1 — EL SCROLL SOLO SE BLOQUEA EN LA PORTADA
+   La portada ocupa exactamente una pantalla. Al entrar al sistema,
+   el documento vuelve a tener scroll normal para Notas, Horarios,
+   grupos, tablas y formularios largos.
+   ================================================================ */
+html,body{overflow-x:hidden;}
+body.uan-dashboard-active{overflow-y:auto !important;overflow-x:hidden !important;}
+body.uan-dashboard-active #dashboard{min-height:100dvh;height:auto;overflow:visible;}
+body.uan-dashboard-active #dashboard .content{overflow-x:auto;overflow-y:visible;}
+body.uan-dashboard-active #inicio{display:none !important;}
+body.uan-dashboard-active #login{display:none !important;}
+@media(max-width:700px){
+  body.uan-dashboard-active{overflow-y:auto !important;}
+  body.uan-dashboard-active #dashboard{min-height:100dvh;height:auto;overflow:visible;}
+  body.uan-dashboard-active #dashboard .content{overflow-x:auto;overflow-y:visible;}
+}

@@ -907,6 +907,7 @@ function mostrarLogin(r){
 }
 
 function volverInicio(){
+  document.body.classList.remove("uan-dashboard-active");
   document.getElementById("login").style.display="none";
   document.getElementById("inicio").style.display="flex";
 }
@@ -950,6 +951,8 @@ function login(){
 
 function entrar(){
   document.getElementById("login").style.display="none";
+  document.getElementById("inicio").style.display="none";
+  document.body.classList.add("uan-dashboard-active");
   document.getElementById("dashboard").style.display="block";
   document.getElementById("user").value="";
   document.getElementById("pass").value="";
@@ -958,6 +961,7 @@ function entrar(){
 
 function logout(){
   usuarioActual = null;
+  document.body.classList.remove("uan-dashboard-active");
   document.getElementById("dashboard").style.display="none";
   document.getElementById("login").style.display="none";
   document.getElementById("inicio").style.display="flex";
