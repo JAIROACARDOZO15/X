@@ -4,24 +4,48 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#07130f">
-<title>Universidad Autónoma Nacional · Plataforma Integra</title>
+<title>Universidad Autónoma Nacional · Plataforma Académica UAN</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="estilos.css?v=11">
+<link rel="stylesheet" href="estilos.css?v=17">
 </head>
 <body>
 
 <!-- ================= INICIO INSTITUCIONAL ================= -->
 <div id="inicio" class="inicio-uan">
   <div class="uan-hero-shell" aria-label="Portal institucional de la Universidad Autónoma Nacional">
-    <img class="uan-hero-image" src="uan-hero.png" alt="Campus de la Universidad Autónoma Nacional al atardecer">
+    <img class="uan-hero-image" src="uan-hero-live.png" alt="Campus de la Universidad Autónoma Nacional al atardecer">
+    <div class="hero-live-time" aria-live="polite">
+      <span id="heroHora">--:--:--</span><b>|</b><span id="heroFecha">-- DE -------- DE ----</span><em>Bucaramanga</em>
+    </div>
+    <div class="hero-status-actions" aria-label="Estado del sistema">
+      <button class="hero-status-action" type="button" onclick="mostrarEstadoSistema('activo')" aria-label="Ver estado del sistema">Sistema activo</button>
+      <button class="hero-status-action" type="button" onclick="mostrarEstadoSistema('sincronizacion')" aria-label="Ver sincronización">Sincronización en tiempo real</button>
+      <button class="hero-status-action" type="button" onclick="mostrarEstadoSistema('seguridad')" aria-label="Ver seguridad de datos">Datos cifrados</button>
+    </div>
 
-    <!-- Hotspots invisibles: la imagen conserva el diseño visual y estas zonas hacen los accesos realmente interactivos. -->
-    <button class="role-hotspot hotspot-admin" type="button" aria-label="Ingresar como administrativo" onclick="mostrarLogin('admin')"></button>
-    <button class="role-hotspot hotspot-doc" type="button" aria-label="Ingresar como docente" onclick="mostrarLogin('doc')"></button>
-    <button class="role-hotspot hotspot-est" type="button" aria-label="Ingresar como estudiante" onclick="mostrarLogin('est')"></button>
-
+    <!-- Accesos institucionales: la imagen es el escenario; estos paneles son los accesos reales. -->
+    <div class="hero-role-grid">
+      <button class="hero-role hero-role-admin" type="button" onclick="mostrarLogin('admin')" aria-label="Ingresar como administrativo">
+        <span class="hero-role-code">ADM <i>01</i></span>
+        <span class="hero-role-icon">▣</span>
+        <span class="hero-role-name">Administrativos</span>
+        <span class="hero-role-action">Ingresar al sistema <b>→</b></span>
+      </button>
+      <button class="hero-role hero-role-doc" type="button" onclick="mostrarLogin('doc')" aria-label="Ingresar como docente">
+        <span class="hero-role-code">DOC <i>02</i></span>
+        <span class="hero-role-icon">⌁</span>
+        <span class="hero-role-name">Docentes</span>
+        <span class="hero-role-action">Ingresar al sistema <b>→</b></span>
+      </button>
+      <button class="hero-role hero-role-est" type="button" onclick="mostrarLogin('est')" aria-label="Ingresar como estudiante">
+        <span class="hero-role-code">EST <i>03</i></span>
+        <span class="hero-role-icon">♙</span>
+        <span class="hero-role-name">Estudiantes</span>
+        <span class="hero-role-action">Ingresar al sistema <b>→</b></span>
+      </button>
+    </div>
     <div class="hero-access-hint" aria-hidden="true">Selecciona tu perfil para ingresar</div>
   </div>
 </div>
@@ -33,7 +57,7 @@
     <div class="login-brand-mark">UAN</div>
     <div class="login-kicker">ACCESO INSTITUCIONAL</div>
     <h2>Iniciar sesión</h2>
-    <p class="login-subtitle">Universidad Autónoma Nacional · Plataforma Integra</p>
+    <p class="login-subtitle">Universidad Autónoma Nacional · Plataforma Académica UAN</p>
     <input id="user" placeholder="Usuario / Código" autocomplete="username">
     <input id="pass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <div id="loginError" class="login-error" aria-live="polite"></div>
@@ -49,7 +73,7 @@
     <div style="display:flex;align-items:center;gap:12px">
       <span class="topbar-icon" onclick="toggleSidebarMobile()" title="Menú">☰</span>
       <div class="logo-mini">UAN</div>
-      <div class="brand">Plataforma Académica Integra UAN</div>
+      <div class="brand">Plataforma Académica UAN</div>
     </div>
     <div style="display:flex;align-items:center;gap:16px">
       <span class="topbar-icon" title="Mensajes">✉️</span>
@@ -57,17 +81,22 @@
       <span id="topbarUsuario" style="font-size:14px">👤</span>
     </div>
   </div>
-  <div class="topbar-buscar">🔍 <input placeholder="Buscar en el menú... (próximamente)" disabled></div>
-
   <div class="sidebar">
+    <div class="sidebar-brand">
+      <img class="sidebar-logo" src="uan-emblem.svg" alt="Escudo UAN">
+      <div class="sidebar-brand-copy">
+        <div class="sidebar-brand-title">UNIVERSIDAD<br>AUTÓNOMA<br>NACIONAL</div>
+        <div class="sidebar-brand-sub">PLATAFORMA ACADÉMICA UAN</div>
+      </div>
+    </div>
     <div class="userbox">
-      <img id="fotoPerfil" src="https://via.placeholder.com/90/1e5631/ffffff?text=UAN" alt="foto">
+      <img id="fotoPerfil" src="avatar-uan.svg" alt="foto">
       <div class="rol" id="rolTexto">Rol: —</div>
       <div class="codigo" id="codigoTexto"></div>
       <div class="nombre" id="nombreTexto"></div>
       <button class="cambiar-foto" id="btnCambiarFoto" onclick="cambiarFoto()" style="display:none">Cambiar foto personal</button>
     </div>
-    <h3 style="font-size:14px;border-bottom:1px solid #33475a;padding-bottom:6px">Opciones</h3>
+    <div class="menu-heading">MENÚ PRINCIPAL</div>
     <div id="menuDinamico"></div>
     <button class="logout-btn btn-peligro" onclick="logout()">Salir</button>
   </div>
@@ -85,6 +114,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="app.js?v=11"></script>
+<script src="app.js?v=17"></script>
 </body>
 </html>
