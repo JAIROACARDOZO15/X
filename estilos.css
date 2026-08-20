@@ -653,3 +653,255 @@ body.uan-dashboard-active #login{display:none !important;}
   body.uan-dashboard-active #dashboard{min-height:100dvh;height:auto;overflow:visible;}
   body.uan-dashboard-active #dashboard .content{overflow-x:auto;overflow-y:visible;}
 }
+
+/* ================================================================
+   UAN INTEGRA V11 — LÍNEA VISUAL SOBRIA
+   Menos adornos, más jerarquía y espacio. La portada conserva su
+   imagen institucional; el interior adopta una estética académica
+   premium, limpia y ligera.
+   ================================================================ */
+:root{
+  --clean-green:#14532d;
+  --clean-green-2:#1f6b3b;
+  --clean-ink:#18231d;
+  --clean-muted:#718078;
+  --clean-bg:#f5f7f5;
+  --clean-surface:#ffffff;
+  --clean-line:#e2e8e3;
+  --clean-gold:#b78a24;
+  --clean-radius:14px;
+  --clean-shadow:0 5px 18px rgba(16,45,29,.055);
+}
+
+/* Interior general */
+#dashboard{
+  background:var(--clean-bg)!important;
+  color:var(--clean-ink)!important;
+}
+#dashboard .topbar{
+  height:62px!important;
+  padding:0 24px!important;
+  background:#ffffff!important;
+  color:var(--clean-ink)!important;
+  border-bottom:1px solid var(--clean-line)!important;
+  box-shadow:0 2px 10px rgba(16,45,29,.04)!important;
+}
+#dashboard .topbar .brand{color:var(--clean-ink)!important;font-size:14px!important;font-weight:700!important;}
+#dashboard .topbar-icon{color:var(--clean-muted)!important;}
+#dashboard .topbar-icon:hover{color:var(--clean-green)!important;transform:none!important;}
+#dashboard .logo-mini{
+  min-width:38px!important;
+  padding:6px 8px!important;
+  background:var(--clean-green)!important;
+  color:#fff!important;
+  border:0!important;
+  border-radius:8px!important;
+  box-shadow:none!important;
+}
+#topbarUsuario{color:var(--clean-muted)!important;}
+
+/* Buscador: pequeño y discreto */
+#dashboard .topbar-buscar{
+  margin:16px 32px 0 302px!important;
+  width:calc(100% - 334px)!important;
+  max-width:620px!important;
+  height:42px!important;
+  padding:0 13px!important;
+  border-radius:10px!important;
+  background:#fff!important;
+  border:1px solid var(--clean-line)!important;
+  box-shadow:none!important;
+  color:#85928b!important;
+}
+#dashboard .topbar-buscar input{font-size:13px!important;color:var(--clean-ink)!important;}
+
+/* Sidebar: institucional, pero sin parecer un panel de videojuego */
+#dashboard .sidebar{
+  width:270px!important;
+  padding:82px 16px 18px!important;
+  background:#10271c!important;
+  border-right:1px solid #193b2a!important;
+  box-shadow:none!important;
+}
+#dashboard .sidebar:before{
+  content:"UNIVERSIDAD AUTÓNOMA NACIONAL"!important;
+  top:25px!important;left:18px!important;
+  color:#9eb5a6!important;
+  font:600 8px/1 var(--uan-mono)!important;
+  letter-spacing:.11em!important;
+}
+#dashboard .sidebar .userbox{
+  padding:4px 8px 18px!important;
+  margin-bottom:12px!important;
+  border-bottom:1px solid rgba(255,255,255,.08)!important;
+}
+#dashboard .sidebar .userbox img{
+  width:70px!important;height:70px!important;
+  border:2px solid rgba(255,255,255,.22)!important;
+  box-shadow:none!important;
+}
+#dashboard .sidebar .userbox .rol{
+  color:#9eb5a6!important;font-size:9px!important;
+}
+#dashboard .sidebar .userbox .codigo{color:#748f7e!important;font-size:9px!important;}
+#dashboard .sidebar .userbox .nombre{
+  font-family:var(--uan-ui)!important;
+  font-size:16px!important;
+  color:#fff!important;
+  margin-top:5px!important;
+}
+#dashboard .sidebar h3{
+  color:#b9c8bf!important;
+  font-size:10px!important;
+  letter-spacing:.12em!important;
+  padding:8px 8px 9px!important;
+}
+#dashboard .menu-item{
+  margin:2px 0!important;
+  padding:11px 10px!important;
+  border:0!important;
+  border-radius:8px!important;
+  color:#e4ebe6!important;
+  font-size:13px!important;
+}
+#dashboard .menu-item:hover{
+  background:rgba(255,255,255,.055)!important;
+  border:0!important;
+  transform:none!important;
+}
+#dashboard .sub{background:#0c2017!important;border-radius:8px!important;}
+#dashboard .sub div{padding:9px 18px!important;color:#b9c8bf!important;}
+#dashboard .sub div:hover{background:rgba(255,255,255,.05)!important;}
+#dashboard .logout-btn{
+  background:#9f3b36!important;
+  box-shadow:none!important;
+  border:0!important;
+  border-radius:8px!important;
+}
+
+/* Contenido */
+#dashboard .content{
+  padding:30px 34px 48px!important;
+  background:transparent!important;
+}
+#dashboard .panel-title{
+  color:var(--clean-green)!important;
+  font-family:var(--uan-display)!important;
+  font-size:30px!important;
+  margin-bottom:18px!important;
+  padding-bottom:11px!important;
+  border-bottom:1px solid var(--clean-line)!important;
+}
+#dashboard .panel-title:after{display:none!important;}
+
+/* Tarjetas */
+#dashboard .dashboard-grid{gap:14px!important;}
+#dashboard .dashboard-tile,
+#dashboard .tarjeta-grupo-notas,
+#dashboard .nc-group{
+  background:#fff!important;
+  border:1px solid var(--clean-line)!important;
+  border-radius:var(--clean-radius)!important;
+  box-shadow:var(--clean-shadow)!important;
+}
+#dashboard .dashboard-tile{padding:22px 14px!important;}
+#dashboard .dashboard-tile:hover{
+  transform:translateY(-2px)!important;
+  border-color:#cbd9cf!important;
+  box-shadow:0 9px 24px rgba(16,45,29,.08)!important;
+}
+#dashboard .dashboard-tile .icono{font-size:30px!important;}
+#dashboard .dashboard-tile .etiqueta{
+  color:#31463a!important;
+  font-family:var(--uan-ui)!important;
+  font-size:11px!important;
+  letter-spacing:.08em!important;
+}
+
+/* Tablas más ligeras */
+#dashboard table{
+  border:1px solid var(--clean-line)!important;
+  border-radius:10px!important;
+  box-shadow:none!important;
+}
+#dashboard th{
+  background:#edf3ee!important;
+  color:#31503d!important;
+  border-color:var(--clean-line)!important;
+  font-family:var(--uan-ui)!important;
+  font-size:11px!important;
+  font-weight:700!important;
+  text-transform:none!important;
+  letter-spacing:0!important;
+}
+#dashboard td{border-color:#e8ede9!important;background:#fff!important;}
+#dashboard tr:hover td{background:#fafcfb!important;}
+
+/* Controles */
+#dashboard button,
+#dashboard select,
+#dashboard input,
+#dashboard textarea{border-radius:8px!important;}
+#dashboard button{box-shadow:none!important;}
+#dashboard button:hover{transform:none!important;}
+#dashboard .add-btn{background:var(--clean-green-2)!important;}
+#dashboard .btn-secundario{background:#718078!important;}
+#dashboard .btn-peligro{background:#9f3b36!important;}
+#dashboard select,#dashboard input,#dashboard textarea{
+  background:#fff!important;
+  border-color:#d8e1db!important;
+}
+#dashboard select:focus,#dashboard input:focus,#dashboard textarea:focus{
+  border-color:#4d9666!important;
+  box-shadow:0 0 0 2px rgba(31,107,59,.08)!important;
+}
+
+/* Avisos y etiquetas */
+#dashboard .aviso{
+  border-radius:10px!important;
+  box-shadow:none!important;
+  background:#f0f7f2!important;
+  border-color:#cfe1d4!important;
+}
+#dashboard .badge{border-radius:999px!important;}
+
+/* Centro de notas */
+#dashboard .tarjeta-grupo-notas{padding:18px 20px!important;}
+#dashboard .tarjeta-grupo-notas h3{
+  font-family:var(--uan-ui)!important;
+  font-size:19px!important;
+  color:var(--clean-ink)!important;
+}
+#dashboard .chip-item{
+  background:#f1f6f2!important;
+  color:#28573a!important;
+  border-color:#d7e5da!important;
+  box-shadow:none!important;
+}
+#dashboard .barra-suma-items{height:6px!important;background:#edf1ee!important;}
+#dashboard .tabla-notas-docente th{
+  background:#edf3ee!important;
+  color:#31503d!important;
+}
+#dashboard .tabla-notas-docente td{background:#fff!important;}
+#dashboard .input-nota{border-color:#d5dfd8!important;}
+
+/* Modal más sobrio */
+.modal-fondo{background:rgba(11,27,19,.48)!important;backdrop-filter:blur(3px)!important;}
+.modal-caja{
+  border:1px solid var(--clean-line)!important;
+  border-radius:16px!important;
+  box-shadow:0 22px 60px rgba(8,28,17,.22)!important;
+}
+.modal-caja h2,.modal-caja h3{color:var(--clean-green)!important;}
+
+/* La portada se mantiene premium, pero sin elementos extra encima de la imagen */
+#inicio.inicio-uan .hero-access-hint{display:none!important;}
+
+@media(max-width:1000px){
+  #dashboard .content{padding:26px 22px 42px!important;}
+}
+@media(max-width:700px){
+  #dashboard .content{padding:22px 14px 36px!important;}
+  #dashboard .topbar-buscar{margin:10px 12px 0!important;width:calc(100% - 24px)!important;max-width:none!important;}
+}
