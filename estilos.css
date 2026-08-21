@@ -3536,3 +3536,8 @@ body.rol-estudiante #dashboard .uan-home-head .panel-title{color:#945b0a!importa
   .student-request-list>div{grid-template-columns:35px 1fr}
   .student-request-list small{grid-column:2}
 }
+
+
+/* V22 — nota enlazada Teórico/Práctico */
+.nc-linked-grade{background:#eef6ff !important;border-left:3px solid #2f5f8f !important;}
+.nc-linked-grade b{color:#1f5f91;}

@@ -750,8 +750,10 @@ function limiteDocenteVigente(programa){
 }
 
 function docentePuedeEditarNotas(programa, grupoId){
+  // Coordinación siempre puede editar. El docente puede volver a editar
+  // un acta propia mientras la fecha límite siga vigente; esto permite
+  // corregir un cierre accidental sin perder la protección del plazo.
   if(usuarioActual?.rol !== "docente") return true;
-  if(getActas()[grupoId]) return false;
   return limiteDocenteVigente(programa);
 }
 
@@ -1775,7 +1777,7 @@ function renderNotasCoordinador(){
       es.forEach(e=>{
         const n=((ns[g.id]||{})[e.codigo])||{};
         const manuales=its.filter(i=>i.tipo!=="asistencia");
-        if(manuellesCompletos(manuales,n)) complete++;
+        if(manuellesCompletos(manuales,n,g.id,e.codigo)) complete++;
       });
       const pct=es.length?Math.round(complete/es.length*100):0;
       const acta=!!getActas()[g.id];
@@ -1907,6 +1909,11 @@ function renderPanelGrupoNotasCoordinador(programa,materia,g){
     const st=isNaN(d)?"Pendiente":d>=3?"Va aprobando":"Va reprobando";
     const cl=isNaN(d)?"warn":d>=3?"ok":"bad";
     const celdas=its.map(i=>{
+      if(i.tipo==="componente_practico"){
+        const v=notaPracticaParaTeoria(g.id,e.codigo);
+        const practica=grupoPracticoPareja(g.id);
+        return `<td class="nc-linked-grade"><b>${isNaN(v)?"—":v.toFixed(1)}</b><br><span class="nc-note">${practica?"Acta práctica · "+(getActas()[practica.id]?"oficial":"pendiente"):"Sin grupo práctico"}</span></td>`;
+      }
       if(i.tipo==="asistencia"){
         const v=calcularNotaAsistencia(g.id,e.codigo);
         return `<td><b>${v===null?"—":v.toFixed(1)}</b><small>automática</small></td>`;
@@ -3179,6 +3186,17 @@ function guardarGrupos(materia){
     saveGrupos(grupos);
   }
 
+  // En materias Teórico/Prácticas dejamos la pareja explícita para que la nota
+  // de Práctica viaje automáticamente al acta Teórica correcta.
+  if(esMateriaTP(programaNombre,materia)) {
+    const ts=nuevosGrupos.filter(g=>g.componente==="Teorico");
+    const ps=nuevosGrupos.filter(g=>g.componente==="Practico");
+    ts.forEach((t,i)=>{ if(ps[i]) t.grupoPracticoId=ps[i].id; });
+    ps.forEach((p,i)=>{ if(ts[i]) p.grupoTeoricoId=ts[i].id; });
+    grupos[programaNombre][materia]=nuevosGrupos;
+    saveGrupos(grupos);
+  }
+
   const resumen = nuevosGrupos.map(g=>`${g.grupo} (${g.docente}): ${resumenBloques(g.bloques)}`).join("<br>");
   document.getElementById("avisoGrupos").innerHTML=`
     <div class="aviso">
@@ -4329,8 +4347,13 @@ function renderConsultaMatriculaNotas(){
     let definitiva=historial[materia]?.definitiva;
     if(definitiva===undefined && defs.length===grupos.length && defs.length){
       if(grupos.length===2 && programasData.tipos?.[materia]?.tp){
-        const pct=(programasData.tipos[materia].pctTeorico!==undefined?programasData.tipos[materia].pctTeorico:70)/100;
-        definitiva=defs[0]*pct+defs[1]*(1-pct);
+        const gT=grupos.find(x=>x.tipo==="Teórico")?.g;
+        if(gT){
+          asegurarItemPracticaEnTeoria(e.programa,materia,gT);
+          const notaT=parseFloat(calcularDefinitivaGrupo(gT.id,e.codigo));
+          const notaP=parseFloat(calcularDefinitivaGrupo(grupos.find(x=>x.tipo==="Práctico")?.id,e.codigo));
+          if(!isNaN(notaT) && !isNaN(notaP)) definitiva=notaT;
+        }
       }else{
         definitiva=defs[0];
       }
@@ -5341,6 +5364,83 @@ function estudiantesDeGrupo(programa, materia, grupoId){
 }
 
 /* Definitiva de la materia = promedio ponderado de los ítems de evaluación configurados */
+/* ======================================================================
+   MATERIAS TEÓRICO/PRÁCTICAS — V22
+   El Director define % Teórico en el pensum. La parte restante es Práctica.
+   El acta de Práctica alimenta automáticamente una casilla de la acta
+   Teórica, de solo lectura. Así la Teórica calcula la definitiva completa.
+   ====================================================================== */
+function buscarContextoGrupo(grupoId){
+  const programas=getProgramas();
+  for(const programa of Object.keys(programas||{})){
+    const gp=(getGrupos()[programa]||{});
+    for(const materia of Object.keys(gp)){
+      const lista=gp[materia]||[];
+      const g=lista.find(x=>String(x.id)===String(grupoId));
+      if(g) return {programa,materia,g,lista};
+    }
+  }
+  return null;
+}
+
+function grupoPracticoPareja(grupoId){
+  const ctx=buscarContextoGrupo(grupoId);
+  if(!ctx || ctx.g.componente!=="Teorico") return null;
+  const practicos=ctx.lista.filter(x=>x && x.componente==="Practico");
+  // Preferimos una pareja explícita (V22+). Para grupos creados antes de V22,
+  // emparejamos por posición Teórico 1 ↔ Práctico 1, etc.
+  if(ctx.g.grupoPracticoId){
+    const directo=practicos.find(x=>String(x.id)===String(ctx.g.grupoPracticoId));
+    if(directo) return directo;
+  }
+  const ts=ctx.lista.filter(x=>x && x.componente==="Teorico");
+  const idx=ts.findIndex(x=>String(x.id)===String(grupoId));
+  if(idx<0) return null;
+  return practicos[idx] || null;
+}
+
+function notaPracticaParaTeoria(grupoTeoricoId,codigo){
+  const gp=grupoPracticoPareja(grupoTeoricoId);
+  if(!gp || !getActas()[gp.id]) return NaN;
+  const d=parseFloat(calcularDefinitivaGrupo(gp.id,codigo));
+  return isNaN(d) ? NaN : d;
+}
+
+function asegurarItemPracticaEnTeoria(programa,materia,grupoTeorico){
+  if(!grupoTeorico || grupoTeorico.componente!=="Teorico" || !esMateriaTP(programa,materia)) return;
+  const data=getProgramas()[programa]||{};
+  const info=(data.tipos||{})[materia]||{};
+  const pctT=Math.max(1,Math.min(99,parseFloat(info.pctTeorico!==undefined?info.pctTeorico:70)||70));
+  const pctP=100-pctT;
+  const config=getConfigEvaluacion();
+  const lista=[...(config[grupoTeorico.id]||[])];
+  const linkedId="tp_practica_"+grupoTeorico.id;
+  let linked=lista.find(i=>i.id===linkedId || i.tipo==="componente_practico");
+  // Un acta ya publicada no se altera silenciosamente: si fue creada antes
+  // de V22, primero debe reabrirse y luego el sistema incorpora la casilla.
+  if(getActas()[grupoTeorico.id] && !linked) return;
+  if(!linked){
+    const manuales=lista.filter(i=>i.tipo!=="componente_practico");
+    const sumaManuales=manuales.reduce((a,i)=>a+(parseFloat(i.peso)||0),0);
+    // Si el docente ya configuró la parte teórica sobre 100%, la escalamos
+    // al porcentaje real del pensum antes de agregar Práctica.
+    if(sumaManuales>0 && Math.abs(sumaManuales-pctT)>0.01){
+      manuales.forEach(i=>{ i.peso=Number(((parseFloat(i.peso)||0)*pctT/sumaManuales).toFixed(2)); });
+    }
+    linked={id:linkedId,nombre:"Componente Práctico (acta del docente de práctica)",peso:pctP,tipo:"componente_practico",soloLectura:true};
+    lista.push(linked);
+    config[grupoTeorico.id]=lista;
+    saveConfigEvaluacion(config);
+  }else{
+    let changed=false;
+    if(linked.id!==linkedId){linked.id=linkedId;changed=true;}
+    if(linked.nombre!=="Componente Práctico (acta del docente de práctica)"){linked.nombre="Componente Práctico (acta del docente de práctica)";changed=true;}
+    if(parseFloat(linked.peso)!==pctP){linked.peso=pctP;changed=true;}
+    if(linked.tipo!=="componente_practico"){linked.tipo="componente_practico";changed=true;}
+    if(changed){config[grupoTeorico.id]=lista;saveConfigEvaluacion(config);}
+  }
+}
+
 function calcularDefinitivaGrupo(grupoId, codigo){
   const items = getConfigEvaluacion()[grupoId] || [];
   const notasEstudiante = ((getNotas()[grupoId] || {})[codigo]) || {};
@@ -5353,6 +5453,8 @@ function calcularDefinitivaGrupo(grupoId, codigo){
     if(item.tipo==="asistencia"){
       const v = calcularNotaAsistencia(grupoId, codigo);
       valor = (v===null) ? NaN : v;
+    } else if(item.tipo==="componente_practico"){
+      valor = notaPracticaParaTeoria(grupoId,codigo);
     } else {
       valor = parseFloat(notasEstudiante[item.id]);
     }
@@ -5394,6 +5496,11 @@ function agregarItemEvaluacion(grupoId){
 
 function eliminarItemEvaluacion(grupoId, itemId){
   const config = getConfigEvaluacion();
+  const existente=(config[grupoId]||[]).find(it=>it.id===itemId);
+  if(existente?.tipo==="componente_practico"){
+    abrirModal(`<div class="status-modal"><h2>Componente automático</h2><p>Esta casilla se genera automáticamente con la nota del acta de Práctica y usa el porcentaje definido en el pensum. No se puede eliminar manualmente.</p></div>`);
+    return;
+  }
   config[grupoId] = (config[grupoId]||[]).filter(it=>it.id!==itemId);
   saveConfigEvaluacion(config);
   renderNotasDocente();
@@ -5428,15 +5535,16 @@ async function intentarPublicarHistorial(programaNombre, materia, codigo){
   if(tipoInfo && tipoInfo.tp){
     const gidT = asign.Teorico, gidP = asign.Practico;
     if(!actas[gidT] || !actas[gidP]) return; // aún falta un componente por subir
+    const gT = (gruposPrograma[materia]||[]).find(x=>x.id===gidT);
+    if(gT) asegurarItemPracticaEnTeoria(programaNombre,materia,gT);
     const notaT = parseFloat(calcularDefinitivaGrupo(gidT, codigo));
     const notaP = parseFloat(calcularDefinitivaGrupo(gidP, codigo));
     if(isNaN(notaT) || isNaN(notaP)) return;
-    const pctT = (tipoInfo.pctTeorico!==undefined ? tipoInfo.pctTeorico : 70) / 100;
-    definitivaFinal = notaT*pctT + notaP*(1-pctT);
-    // No basta con que la ponderada dé arriba de 3.0: cada componente (Teórico Y Práctico)
-    // debe estar aprobado por separado para que la materia cuente como aprobada.
-    aprobadaFinal = (definitivaFinal >= 3.0) && (notaT >= 3.0) && (notaP >= 3.0);
-    const gT = (gruposPrograma[materia]||[]).find(x=>x.id===gidT);
+    // La definitiva Teórica ya incorpora automáticamente la nota del acta
+    // Práctica con el porcentaje del pensum; no se vuelve a ponderar aquí.
+    definitivaFinal = notaT;
+    // Se conserva la regla existente: ambos componentes deben estar aprobados.
+    aprobadaFinal = (definitivaFinal >= 3.0) && (notaP >= 3.0);
     const gP = (gruposPrograma[materia]||[]).find(x=>x.id===gidP);
     grupoLabel = `T:${gT?gT.grupo:"-"} / P:${gP?gP.grupo:"-"}`;
     docenteLabel = `T: ${gT?gT.docente:"-"} · P: ${gP?gP.docente:"-"}`;
@@ -5511,8 +5619,13 @@ function subirActas(programaNombre, grupoId, materia){
 }
 
 function reabrirActas(grupoId){
-  if(usuarioActual?.rol!=="coordinador"){
-    abrirModal(`<div class="status-modal"><h2>Acta protegida</h2><p>Los docentes no pueden reabrir actas. Solicita la corrección a Coordinación Académica.</p></div>`);
+  const ctx=buscarContextoGrupo(grupoId);
+  const programa=ctx?.programa || usuarioActual?.programa || "";
+  const esDocente=usuarioActual?.rol==="docente";
+  const docenteResponsable=!!(ctx?.g && ctx.g.docente===usuarioActual?.nombre);
+  const autorizado=usuarioActual?.rol==="coordinador" || (esDocente && docenteResponsable && limiteDocenteVigente(programa));
+  if(!autorizado){
+    abrirModal(`<div class="status-modal"><h2>Acta protegida</h2><p>El acta solo puede reabrirse por Coordinación o por el docente responsable mientras la fecha límite siga vigente.</p></div>`);
     return;
   }
   pedirConfirmacion("¿Reabrir las actas de este grupo para corregir notas? El estudiante seguirá viendo la última nota oficial hasta que subas actas de nuevo.", async function(){
@@ -5716,7 +5829,7 @@ function renderNotasDocente(){
     es.forEach(e => {
       const n = ((ns[g.id] || {})[e.codigo]) || {};
       const manuales = its.filter(i => i.tipo !== "asistencia");
-      if(manuales.length === 0 || manuales.every(i => n[i.id] !== undefined && n[i.id] !== "")){
+      if(manuales.length === 0 || manuales.every(i => i.tipo==="componente_practico" ? !isNaN(notaPracticaParaTeoria(g.id,e.codigo)) : (n[i.id] !== undefined && n[i.id] !== ""))){
         done++;
       }
     });
@@ -6394,9 +6507,13 @@ function estilosCentroNotas(){ return `
 /* Panel de un grupo concreto. */
 function renderPanelGrupoCentroNotas(programa,materia,g){
   const es = estudiantesDeGrupo(programa,materia,g.id);
-  const its = getConfigEvaluacion()[g.id] || [];
+  let its = getConfigEvaluacion()[g.id] || [];
   const ns = getNotas();
   const acta = !!getActas()[g.id];
+  if(g.componente==="Teorico" && esMateriaTP(programa,materia)){
+    asegurarItemPracticaEnTeoria(programa,materia,g);
+    its = getConfigEvaluacion()[g.id] || [];
+  }
 
   const peso = its.reduce((a,i)=>a+(parseFloat(i.peso)||0),0);
 
@@ -6406,7 +6523,7 @@ function renderPanelGrupoCentroNotas(programa,materia,g){
     const n=((ns[g.id]||{})[e.codigo])||{};
     const manuales=its.filter(i=>i.tipo!=="asistencia");
 
-    if(manuellesCompletos(manuales,n)) complete++;
+    if(manuellesCompletos(manuales,n,g.id,e.codigo)) complete++;
     else pend++;
 
     const d=parseFloat(calcularDefinitivaGrupo(g.id,e.codigo));
@@ -6495,7 +6612,7 @@ function renderPanelGrupoCentroNotas(programa,materia,g){
           </button>
 
           ${acta
-            ? (usuarioActual?.rol==="coordinador"
+            ? ((usuarioActual?.rol==="coordinador" || (usuarioActual?.rol==="docente" && limiteVigente))
               ? `<button type="button" class="nc-btn" onclick="reabrirActas('${escAttr(g.id)}')">↺ Reabrir acta</button>`
               : `<b class="nc-readonly-chip">✓ Acta oficial · Solo lectura</b>`)
             : (puede
@@ -6547,7 +6664,7 @@ function renderPanelGrupoCentroNotas(programa,materia,g){
               <div class="nc-config-row">
                 <span>${i.tipo==="asistencia"?"✅ ":""}${i.nombre}</span>
                 <b>${i.peso}%</b>
-                ${acta
+                ${acta || i.tipo==="componente_practico"
                   ? ""
                   : `<button type="button"
                        class="nc-delete"
@@ -6664,9 +6781,11 @@ function renderPanelGrupoCentroNotas(programa,materia,g){
   );
 }
 
-function manuellesCompletos(manuales,n){
-  return manuales.length===0 ||
-    manuales.every(i=>n[i.id]!==undefined && n[i.id]!=="");
+function manuellesCompletos(manuales,n,grupoId,codigo){
+  return manuales.length===0 || manuales.every(i=>{
+    if(i.tipo==="componente_practico") return !isNaN(notaPracticaParaTeoria(grupoId,codigo));
+    return n[i.id]!==undefined && n[i.id]!=="";
+  });
 }
 
 function filtrarEstudiantesNotasPro(v){
