@@ -537,8 +537,19 @@ async function sincronizarActasEvaluacionHistorialDesdeSupabase(){
       localStorage.setItem("uan_actas", JSON.stringify(obj));
     }
     if(!rConfig.error && rConfig.data){
-      const obj={}; rConfig.data.forEach(row=>{ obj[row.grupo_id]=row.data; });
+      const obj={};
+      let configActasRemota=null;
+      rConfig.data.forEach(row=>{
+        if(String(row.grupo_id)==="__GLOBAL_ACTAS__"){
+          configActasRemota=row.data || {};
+        }else{
+          obj[row.grupo_id]=row.data;
+        }
+      });
       localStorage.setItem("uan_config_evaluacion", JSON.stringify(obj));
+      if(configActasRemota){
+        localStorage.setItem("uan_config_actas", JSON.stringify(configActasRemota));
+      }
     }
     if(!rEval.error && rEval.data){
       const obj={};
@@ -607,6 +618,8 @@ async function empujarConfigEvaluacionASupabase(obj){
   try{
     await supabaseClient.from("config_evaluacion").delete().neq("grupo_id","___ninguno___");
     const filas = Object.keys(obj).map(grupoId=>({grupo_id:grupoId, data:obj[grupoId]}));
+    const configActas = getConfigActas();
+    filas.push({grupo_id:"__GLOBAL_ACTAS__", data:configActas});
     if(filas.length){
       const { error } = await supabaseClient.from("config_evaluacion").insert(filas);
       if(error) console.error("No se pudo guardar config_evaluacion en Supabase:", error);
@@ -691,6 +704,87 @@ async function empujarNormalidadEstudiantesASupabase(obj){
       if(error) console.error("No se pudo guardar normalidad_estudiante en Supabase:", error);
     }
   }catch(err){ console.error("No se pudo guardar normalidad_estudiante en Supabase:", err); }
+}
+
+
+/* ======================================================================
+   CONTROL ACADÉMICO DE ACTAS Y CORRECCIONES
+   - El Coordinador puede corregir notas durante todo el semestre.
+   - El docente puede registrar/cerrar notas únicamente hasta la fecha
+     y hora configuradas por Coordinación.
+   - Después del límite, el docente queda en solo lectura.
+   - Las correcciones del Coordinador quedan identificadas en la fila de nota.
+   ====================================================================== */
+function getConfigActas(){
+  try { return JSON.parse(localStorage.getItem("uan_config_actas") || "{}"); }
+  catch(e){ return {}; }
+}
+
+function saveConfigActas(obj){
+  localStorage.setItem("uan_config_actas", JSON.stringify(obj || {}));
+  empujarConfigEvaluacionASupabase(getConfigEvaluacion());
+}
+
+function getFechaLimiteDocentes(programa){
+  const cfg = getConfigActas();
+  return cfg?.[programa]?.fechaLimiteDocentes || "";
+}
+
+function formatearFechaLimite(fecha){
+  if(!fecha) return "No configurada";
+  const d = new Date(fecha);
+  if(isNaN(d.getTime())) return "No configurada";
+  return d.toLocaleString("es-CO", {
+    timeZone:"America/Bogota",
+    day:"2-digit", month:"2-digit", year:"numeric",
+    hour:"2-digit", minute:"2-digit", hour12:false
+  });
+}
+
+function limiteDocenteVigente(programa){
+  const fecha = getFechaLimiteDocentes(programa);
+  if(!fecha) return true;
+  const d = new Date(fecha);
+  if(isNaN(d.getTime())) return true;
+  return Date.now() <= d.getTime();
+}
+
+function docentePuedeEditarNotas(programa, grupoId){
+  if(usuarioActual?.rol !== "docente") return true;
+  if(getActas()[grupoId]) return false;
+  return limiteDocenteVigente(programa);
+}
+
+function obtenerMetaNotas(grupoId,codigo){
+  try{
+    const notas=((getNotas()[grupoId]||{})[codigo]) || {};
+    return notas._meta || {};
+  }catch(e){ return {}; }
+}
+
+function registrarMetaNota(grupoId,codigo,itemId,actor){
+  const notas=getNotas();
+  if(!notas[grupoId]) notas[grupoId]={};
+  if(!notas[grupoId][codigo]) notas[grupoId][codigo]={};
+  if(!notas[grupoId][codigo]._meta) notas[grupoId][codigo]._meta={};
+  notas[grupoId][codigo]._meta[itemId]={
+    actor: actor || "docente",
+    nombre: usuarioActual?.nombre || usuarioActual?.usuario || "Usuario",
+    fecha: new Date().toISOString()
+  };
+  localStorage.setItem("uan_notas", JSON.stringify(notas));
+  return notas;
+}
+
+function metaNotaCoordinador(grupoId,codigo,itemId){
+  const meta=obtenerMetaNotas(grupoId,codigo)[itemId];
+  return meta && meta.actor==="coordinador" ? meta : null;
+}
+
+function descripcionMetaNota(grupoId,codigo,itemId){
+  const meta=metaNotaCoordinador(grupoId,codigo,itemId);
+  if(!meta) return "";
+  return `Editado por Coordinador · ${meta.nombre || "Coordinación"} · ${formatearFechaLimite(meta.fecha)}`;
 }
 
 function getConfigEvaluacion(){ return JSON.parse(localStorage.getItem("uan_config_evaluacion") || "{}"); }
@@ -1348,6 +1442,8 @@ function renderSidebar(){
       <div class="menu-item" onclick="renderProgramarMateria()">Programar Materia (Grupos) <span>›</span></div>
       <div class="menu-item" onclick="renderVerGrupos()">Ver Grupos Programados <span>›</span></div>
       <div class="menu-item" onclick="renderGestionMatriculas()">Abrir / Cerrar Matrículas <span>›</span></div>
+      <div class="menu-item" onclick="renderNotasCoordinador()">📝 Notas y correcciones <span>›</span></div>
+      <div class="menu-item" onclick="renderConfigActasCoordinador()">⏰ Fecha límite de actas <span>›</span></div>
       <div class="menu-item" onclick="renderInclusiones()">Inclusiones (cambios manuales) <span>›</span></div>
     `;
     renderHomeDashboard();
@@ -1495,6 +1591,8 @@ function renderHomeDashboard(){
       {icono:"🗓️", label:"Programar Materia", desc:"Crea grupos y horarios", accion:"renderProgramarMateria()"},
       {icono:"👥", label:"Ver Grupos", desc:"Consulta los grupos programados", accion:"renderVerGrupos()"},
       {icono:"🔓", label:"Abrir / Cerrar Matrículas", desc:"Gestiona el periodo de matrícula", accion:"renderGestionMatriculas()"},
+      {icono:"📝", label:"Notas y correcciones", desc:"Corrige notas como Coordinación", accion:"renderNotasCoordinador()"},
+      {icono:"⏰", label:"Fecha límite de actas", desc:"Define día y hora para docentes", accion:"renderConfigActasCoordinador()"},
       {icono:"✏️", label:"Inclusiones", desc:"Gestiona cambios manuales", accion:"renderInclusiones()"}
     ];
   }
@@ -1529,6 +1627,323 @@ function renderHomeDashboard(){
 
 function toggleSidebarMobile(){
   document.querySelector(".sidebar").classList.toggle("mostrar-movil");
+}
+
+
+/* ======================================================================
+   COORDINACIÓN — NOTAS, CORRECCIONES Y FECHA LÍMITE DE ACTAS
+   ====================================================================== */
+function estadoCentroNotasCoordinador(){
+  if(!window.centroNotasCoordinador){
+    window.centroNotasCoordinador={programa:usuarioActual?.programa||"",materia:"",grupoId:""};
+  }
+  return window.centroNotasCoordinador;
+}
+
+function renderConfigActasCoordinador(mensaje){
+  if(usuarioActual?.rol!=="coordinador"){
+    document.getElementById("contenido").innerHTML=`<div class="aviso aviso-error">Solo Coordinación puede administrar la fecha límite de actas.</div>`;
+    return;
+  }
+  const programa=usuarioActual.programa;
+  const actual=getFechaLimiteDocentes(programa);
+  document.getElementById("contenido").innerHTML=`
+    <div class="coord-control-shell">
+      <div class="coord-control-hero">
+        <span>COORDINACIÓN ACADÉMICA · ACTAS</span>
+        <h2>Fecha límite para docentes</h2>
+        <p>Hasta esta fecha y hora los docentes pueden registrar y publicar notas. Después quedan en <b>solo lectura</b>. Coordinación puede seguir corrigiendo durante todo el semestre.</p>
+      </div>
+      ${mensaje?`<div class="aviso">${mensaje}</div>`:""}
+      <section class="coord-control-card">
+        <div class="coord-control-current">
+          <span>LÍMITE ACTUAL</span>
+          <b>${actual ? formatearFechaLimite(actual) : "No configurado"}</b>
+        </div>
+        <label class="coord-field">
+          <span>Fecha y hora de cierre para docentes</span>
+          <input id="coordFechaLimite" type="datetime-local" value="${actual ? String(actual).slice(0,16) : ""}">
+        </label>
+        <div class="coord-actions">
+          <button class="coord-primary" type="button" onclick="guardarFechaLimiteActas()">💾 Guardar fecha límite</button>
+          ${actual ? `<button class="coord-secondary" type="button" onclick="quitarFechaLimiteActas()">↺ Quitar límite</button>` : ""}
+        </div>
+        <div class="coord-info">
+          <b>Regla del sistema</b>
+          <ul>
+            <li>Antes del límite: el docente puede registrar notas.</li>
+            <li>Después del límite: el docente puede consultar, pero no modificar ni cerrar actas.</li>
+            <li>Acta publicada: el docente queda en solo lectura.</li>
+            <li>Coordinación: puede corregir notas en cualquier momento y el cambio queda marcado como <b>editado por Coordinador</b>.</li>
+          </ul>
+        </div>
+      </section>
+    </div>`;
+}
+
+function guardarFechaLimiteActas(){
+  const input=document.getElementById("coordFechaLimite");
+  if(!input || !input.value){
+    renderConfigActasCoordinador(`<span style="color:#a83232">⚠ Selecciona una fecha y hora.</span>`);
+    return;
+  }
+  const d=new Date(input.value);
+  if(isNaN(d.getTime())){
+    renderConfigActasCoordinador(`<span style="color:#a83232">⚠ La fecha no es válida.</span>`);
+    return;
+  }
+  const cfg=getConfigActas();
+  if(!cfg[usuarioActual.programa]) cfg[usuarioActual.programa]={};
+  cfg[usuarioActual.programa].fechaLimiteDocentes=d.toISOString();
+  cfg[usuarioActual.programa].actualizadoPor=usuarioActual.usuario||"coordinador";
+  cfg[usuarioActual.programa].actualizadoEn=new Date().toISOString();
+  saveConfigActas(cfg);
+  renderConfigActasCoordinador(`✅ Fecha límite guardada: <b>${formatearFechaLimite(d.toISOString())}</b>.`);
+}
+
+function quitarFechaLimiteActas(){
+  const cfg=getConfigActas();
+  if(cfg[usuarioActual.programa]) delete cfg[usuarioActual.programa].fechaLimiteDocentes;
+  saveConfigActas(cfg);
+  renderConfigActasCoordinador("✅ Se quitó el límite temporal. Los docentes podrán registrar notas hasta que Coordinación configure uno nuevo.");
+}
+
+function renderNotasCoordinador(){
+  if(usuarioActual?.rol!=="coordinador"){
+    document.getElementById("contenido").innerHTML=`<div class="aviso aviso-error">Acceso exclusivo para Coordinación.</div>`;
+    return;
+  }
+
+  const s=estadoCentroNotasCoordinador();
+  const programa=usuarioActual.programa;
+  const gp=getGrupos()[programa]||{};
+  const dataPrograma=getProgramas()[programa]||{};
+
+  /* Mostrar TODO el catálogo del programa, no solamente las materias que
+     ya tienen grupos. Así Coordinación puede ver todas las materias del plan
+     y distinguir cuáles ya están programadas. */
+  const materiasPensum=Object.values(dataPrograma.niveles||{}).flat();
+  const materiasGrupos=Object.keys(gp);
+  const materias=[...new Set([...materiasPensum,...materiasGrupos])];
+
+  if(!materias.length){
+    document.getElementById("contenido").innerHTML=`
+      <div class="coord-control-shell">
+        <div class="coord-control-hero">
+          <span>COORDINACIÓN ACADÉMICA · CALIFICACIONES</span>
+          <h2>Notas y correcciones</h2>
+          <p>No hay materias cargadas en el plan de estudios de ${escAttr(programa)}.</p>
+        </div>
+        <div class="coord-control-card">
+          <button type="button" class="coord-secondary" onclick="renderHomeDashboard()">← Volver al inicio</button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  if(!materias.includes(s.materia)) s.materia=materias[0];
+  const grupos=gp[s.materia]||[];
+
+  if(s.grupoId){
+    const g=grupos.find(x=>String(x.id)===String(s.grupoId));
+    if(g){ renderPanelGrupoNotasCoordinador(programa,s.materia,g); return; }
+    s.grupoId="";
+  }
+
+  const cards=materias.map((materia)=>{
+    const gruposMateria=gp[materia]||[];
+    const creditos=(dataPrograma.creditos||{})[materia] ?? 3;
+
+    if(!gruposMateria.length){
+      return `<article class="coord-notes-group coord-notes-group-disabled">
+        <div>
+          <span class="coord-kicker">MATERIA · ${escAttr(creditos)} CRÉDITOS</span>
+          <h3>${escAttr(materia)}</h3>
+          <p>Esta materia pertenece al plan, pero todavía no tiene grupos programados.</p>
+        </div>
+        <strong>NO PROGRAMADA</strong>
+        <div class="coord-progress"><i style="width:0%"></i></div>
+        <small>Programa grupos desde "Programar Materia (Grupos)".</small>
+      </article>`;
+    }
+
+    return gruposMateria.map(g=>{
+      const es=estudiantesDeGrupo(programa,materia,g.id);
+      const its=getConfigEvaluacion()[g.id]||[];
+      const ns=getNotas();
+      let complete=0;
+      es.forEach(e=>{
+        const n=((ns[g.id]||{})[e.codigo])||{};
+        const manuales=its.filter(i=>i.tipo!=="asistencia");
+        if(manuellesCompletos(manuales,n)) complete++;
+      });
+      const pct=es.length?Math.round(complete/es.length*100):0;
+      const acta=!!getActas()[g.id];
+
+      return `<button type="button" class="coord-notes-group" data-coord-notas-grupo="${escAttr(g.id)}">
+        <div>
+          <span class="coord-kicker">${escAttr(materia)} · ${escAttr(creditos)} CRÉDITOS</span>
+          <h3>Grupo ${escAttr(g.grupo||"-")}</h3>
+          <p>${g.componente?(g.componente==="Teorico"?"Teórico":"Práctico")+" · ":""}${es.length} estudiantes</p>
+        </div>
+        <strong>${acta?"ACTA PUBLICADA":"EN EDICIÓN"} →</strong>
+        <div class="coord-progress"><i style="width:${pct}%"></i></div>
+        <small>${complete}/${es.length} estudiantes con ítems diligenciados</small>
+      </button>`;
+    }).join("");
+  }).join("");
+
+  const totalMaterias=materias.length;
+  const programadas=materias.filter(m=>(gp[m]||[]).length>0).length;
+  const pendientes=totalMaterias-programadas;
+
+  document.getElementById("contenido").innerHTML=`
+    <div class="coord-control-shell">
+      <div class="coord-control-hero">
+        <span>COORDINACIÓN ACADÉMICA · CALIFICACIONES</span>
+        <h2>Notas y correcciones</h2>
+        <p>Selecciona una materia para administrar sus grupos, calificaciones y correcciones.</p>
+      </div>
+
+      <div class="coord-notes-toolbar">
+        <button type="button" class="coord-secondary" onclick="renderHomeDashboard()">← Volver al inicio</button>
+        <div class="coord-notes-select">
+          <label><span>Ir directamente a una materia</span>
+            <select id="coordNotasMateria">
+              ${materias.map(m=>`<option value="${escAttr(m)}" ${m===s.materia?"selected":""}>${escAttr(m)}</option>`).join("")}
+            </select>
+          </label>
+          <div class="coord-deadline-chip">⏰ Límite docente: <b>${formatearFechaLimite(getFechaLimiteDocentes(programa))}</b></div>
+        </div>
+      </div>
+
+      <div class="coord-notes-overview">
+        <div><b>${totalMaterias}</b><span>materias del plan</span></div>
+        <div><b>${programadas}</b><span>con grupos</span></div>
+        <div><b>${pendientes}</b><span>por programar</span></div>
+      </div>
+
+      <div class="coord-notes-section-title">
+        <div><span>CATÁLOGO ACADÉMICO</span><h3>Materias y grupos</h3></div>
+        <small>Las materias sin grupo siguen visibles para que no se pierda ninguna.</small>
+      </div>
+
+      <div class="coord-notes-grid">${cards}</div>
+    </div>`;
+}
+
+function instalarNavegacionCoordinadorNotas(){
+  if(window.__uanCoordNotasEventosInstalados) return;
+  window.__uanCoordNotasEventosInstalados=true;
+  document.addEventListener("click",function(ev){
+    const btn=ev.target?.closest?.("[data-coord-notas-grupo]");
+    if(!btn) return;
+    ev.preventDefault();
+    const s=estadoCentroNotasCoordinador();
+    s.grupoId=btn.getAttribute("data-coord-notas-grupo")||"";
+    renderNotasCoordinador();
+  },true);
+  document.addEventListener("change",function(ev){
+    if(ev.target?.id==="coordNotasMateria"){
+      const s=estadoCentroNotasCoordinador();
+      s.materia=ev.target.value;
+      s.grupoId="";
+      renderNotasCoordinador();
+    }
+  },true);
+}
+instalarNavegacionCoordinadorNotas();
+
+async function guardarNotaCoordinador(programa,materia,grupoId,codigo,itemId,valor){
+  const num=String(valor).trim()==="" ? "" : parseFloat(valor);
+  if(num!=="" && (isNaN(num)||num<0||num>5)){
+    alert("La nota debe estar entre 0.0 y 5.0.");
+    return;
+  }
+  const notas=getNotas();
+  if(!notas[grupoId]) notas[grupoId]={};
+  if(!notas[grupoId][codigo]) notas[grupoId][codigo]={};
+  notas[grupoId][codigo][itemId]=num;
+  if(!notas[grupoId][codigo]._meta) notas[grupoId][codigo]._meta={};
+  notas[grupoId][codigo]._meta[itemId]={
+    actor:"coordinador",
+    nombre:usuarioActual.nombre||"Coordinación",
+    fecha:new Date().toISOString(),
+    motivo:"Corrección de nota por Coordinación"
+  };
+  localStorage.setItem("uan_notas",JSON.stringify(notas));
+  const key=String(grupoId)+"::"+String(codigo);
+  agregarPendienteSync(SYNC_NOTAS_PENDIENTES,key);
+  const ok=await empujarFilaNotaASupabase(grupoId,codigo,notas[grupoId][codigo]);
+  // Si el acta ya estaba publicada, la definitiva oficial se actualiza inmediatamente.
+  if(getActas()[grupoId]){
+    await intentarPublicarHistorial(programa,materia,codigo);
+  }
+  const d=calcularDefinitivaGrupo(grupoId,codigo);
+  const def=document.getElementById(`coord_def_${grupoId}_${codigo}`);
+  if(def) def.textContent=d||"—";
+  const estado=document.getElementById(`coord_estado_${grupoId}_${codigo}`);
+  if(estado){
+    const n=parseFloat(d);
+    estado.textContent=isNaN(n)?"Pendiente":n>=3?"Va aprobando":"Va reprobando";
+    estado.className="coord-status "+(isNaN(n)?"warn":n>=3?"ok":"bad");
+  }
+  const stamp=document.querySelector(`[data-coord-save="${grupoId}_${codigo}_${itemId}"]`);
+  if(stamp){
+    stamp.textContent=ok?"✓ corregido por coordinación":"⚠ pendiente de sincronizar";
+    stamp.className="coord-edit-badge "+(ok?"ok":"warn");
+  }
+}
+
+function renderPanelGrupoNotasCoordinador(programa,materia,g){
+  const es=estudiantesDeGrupo(programa,materia,g.id);
+  const its=getConfigEvaluacion()[g.id]||[];
+  const ns=getNotas();
+  const acta=!!getActas()[g.id];
+  const peso=its.reduce((a,i)=>a+(parseFloat(i.peso)||0),0);
+  const filas=es.map(e=>{
+    const n=((ns[g.id]||{})[e.codigo])||{};
+    const d=parseFloat(calcularDefinitivaGrupo(g.id,e.codigo));
+    const st=isNaN(d)?"Pendiente":d>=3?"Va aprobando":"Va reprobando";
+    const cl=isNaN(d)?"warn":d>=3?"ok":"bad";
+    const celdas=its.map(i=>{
+      if(i.tipo==="asistencia"){
+        const v=calcularNotaAsistencia(g.id,e.codigo);
+        return `<td><b>${v===null?"—":v.toFixed(1)}</b><small>automática</small></td>`;
+      }
+      const v=n[i.id];
+      const editado=metaNotaCoordinador(g.id,e.codigo,i.id);
+      const desc=editado?descripcionMetaNota(g.id,e.codigo,i.id):"";
+      return `<td class="coord-note-cell">
+        <input class="coord-note-input" type="number" min="0" max="5" step="0.1"
+          value="${v!==undefined?v:""}"
+          onchange="guardarNotaCoordinador('${escAttr(programa)}','${escAttr(materia)}','${escAttr(g.id)}','${escAttr(e.codigo)}','${escAttr(i.id)}',this.value)">
+        <span data-coord-save="${escAttr(g.id)}_${escAttr(e.codigo)}_${escAttr(i.id)}" class="coord-edit-badge ${editado?"ok":""}" title="${escAttr(desc)}">${editado?"✓ editado por coordinación":""}</span>
+      </td>`;
+    }).join("");
+    return `<tr><td><b>${escAttr(e.nombre)}</b><small>${escAttr(e.codigo)}</small></td>${celdas}
+      <td><b class="coord-def" id="coord_def_${escAttr(g.id)}_${escAttr(e.codigo)}">${isNaN(d)?"—":d.toFixed(1)}</b></td>
+      <td><span id="coord_estado_${escAttr(g.id)}_${escAttr(e.codigo)}" class="coord-status ${cl}">${st}</span></td></tr>`;
+  }).join("");
+
+  document.getElementById("contenido").innerHTML=`
+    <div class="coord-control-shell">
+      <div class="coord-breadcrumb coord-breadcrumb-enhanced">
+        <button type="button" onclick="renderNotasCoordinador()">← Todas las materias</button>
+        <button type="button" onclick="renderHomeDashboard()" class="coord-breadcrumb-home">Inicio</button>
+        <span>›</span><b>${escAttr(materia)} · Grupo ${escAttr(g.grupo||"-")}</b>
+      </div>
+      <div class="coord-control-hero">
+        <span>EDICIÓN ADMINISTRATIVA DE NOTAS</span>
+        <h2>${escAttr(materia)} · Grupo ${escAttr(g.grupo||"-")}</h2>
+        <p>${es.length} estudiantes · ${acta?"Acta publicada":"Acta en edición"} · Ponderación ${peso}%</p>
+      </div>
+      <div class="aviso" style="margin-bottom:14px">🛡️ <b>Modo Coordinación:</b> puedes corregir notas durante todo el semestre. Cada cambio queda identificado y, si el acta ya estaba publicada, la definitiva oficial del estudiante se actualiza.</div>
+      <section class="coord-notes-table-card">
+        <div class="coord-table-head"><div><b>Registro de calificaciones</b><small>Las notas de Coordinación se marcan automáticamente.</small></div><span>⏰ Límite docente: <b>${formatearFechaLimite(getFechaLimiteDocentes(programa))}</b></span></div>
+        <div class="coord-table-wrap"><table class="coord-notes-table"><thead><tr><th>Estudiante</th>${its.map(i=>`<th>${i.tipo==="asistencia"?"✅ ":""}${escAttr(i.nombre)}<br><small>${i.peso}%</small></th>`).join("")}<th>Definitiva</th><th>Estado</th></tr></thead><tbody>${filas}</tbody></table></div>
+      </section>
+    </div>`;
 }
 
 /* ======================================================================
@@ -3623,44 +4038,170 @@ function renderAvancePlanEstudiante(){
   const data = getProgramas()[e.programa];
 
   if(!data){
-    document.getElementById("contenido").innerHTML=`<h2 class="panel-title">Avance Plan de Estudios</h2><p>El Director de Escuela aún no ha publicado el plan de estudios de ${e.programa}.</p>`;
+    document.getElementById("contenido").innerHTML=`
+      <section class="student-progress-shell">
+        <div class="student-progress-hero">
+          <span>PORTAL DEL ESTUDIANTE · PLAN ACADÉMICO</span>
+          <h2>Avance de mi plan de estudios</h2>
+          <p>El Director de Escuela aún no ha publicado el plan de estudios de ${escAttr(e.programa)}.</p>
+        </div>
+      </section>`;
     return;
   }
 
   const creditosPrograma = data.creditos || {};
   const historial = getHistorial()[e.codigo] || {};
-
+  const niveles = Object.keys(data.niveles||{});
   let creditosAprobados = 0;
   let creditosTotalesPrograma = 0;
+  let materiasAprobadas = 0;
+  let materiasReprobadas = 0;
+  let materiasPendientes = 0;
+  let nivelActual = null;
   let tablasNiveles = "";
 
-  for(let n in data.niveles){
-    tablasNiveles += `<h3>${n}</h3><table><tr><th>Materia</th><th>Créditos</th><th>Estado</th></tr>`;
-    data.niveles[n].forEach(m=>{
-      const creditosMateria = creditosPrograma[m]!==undefined ? creditosPrograma[m] : 3;
-      creditosTotalesPrograma += creditosMateria;
+  niveles.forEach((n,idx)=>{
+    const materiasNivel=data.niveles[n]||[];
+    let aprobadasNivel=0, reprobadasNivel=0, pendientesNivel=0, creditosNivel=0;
 
-      const registro = historial[m];
-      let estadoHtml = `<span style="color:#999">Sin cursar</span>`;
+    materiasNivel.forEach(m=>{
+      const creditosMateria=creditosPrograma[m]!==undefined ? Number(creditosPrograma[m]) : 3;
+      creditosTotalesPrograma += creditosMateria;
+      creditosNivel += creditosMateria;
+
+      const registro=historial[m];
+      if(registro?.aprobada){
+        aprobadasNivel++;
+        materiasAprobadas++;
+        creditosAprobados += creditosMateria;
+      }else if(registro){
+        reprobadasNivel++;
+        materiasReprobadas++;
+      }else{
+        pendientesNivel++;
+        materiasPendientes++;
+      }
+    });
+
+    /* El primer nivel que todavía tiene materias pendientes se toma como
+       referencia visual del avance actual. */
+    if(nivelActual===null && pendientesNivel>0) nivelActual=n;
+
+    const pctNivel=creditosNivel ? Math.round(
+      materiasNivel.reduce((acc,m)=>{
+        const r=historial[m];
+        return acc + (r?.aprobada ? (creditosPrograma[m]!==undefined?Number(creditosPrograma[m]):3) : 0);
+      },0)/creditosNivel*100
+    ) : 0;
+
+    const filas=materiasNivel.map(m=>{
+      const cred=creditosPrograma[m]!==undefined ? Number(creditosPrograma[m]) : 3;
+      const registro=historial[m];
+      let estadoClass="pending", estadoTexto="Pendiente", nota="—";
 
       if(registro){
-        const color = registro.aprobada ? "#1e5631" : "#a83232";
-        const fondo = registro.aprobada ? "#eaf7ea" : "#fdecea";
-        const texto = registro.aprobada ? "Aprobada" : "Reprobada";
-        estadoHtml = `<span style="background:${fondo};color:${color};font-weight:bold;padding:3px 8px;border-radius:6px">${texto} — ${registro.definitiva.toFixed(1)}</span>`;
-        if(registro.aprobada) creditosAprobados += creditosMateria;
+        if(registro.aprobada){
+          estadoClass="approved";
+          estadoTexto="Aprobada";
+        }else{
+          estadoClass="failed";
+          estadoTexto="Reprobada";
+        }
+        const nd=parseFloat(registro.definitiva);
+        nota=isNaN(nd) ? "—" : nd.toFixed(1);
       }
 
-      tablasNiveles += `<tr><td style="text-align:left">${m}</td><td>${creditosMateria}</td><td>${estadoHtml}</td></tr>`;
-    });
-    tablasNiveles += "</table>";
-  }
+      return `<div class="student-progress-row">
+        <div class="student-progress-subject">
+          <span class="student-progress-status-dot ${estadoClass}"></span>
+          <div><b>${escAttr(m)}</b><small>${cred} créditos</small></div>
+        </div>
+        <span class="student-progress-state ${estadoClass}">${estadoTexto}</span>
+        <strong class="student-progress-grade">${nota}</strong>
+      </div>`;
+    }).join("");
 
-  document.getElementById("contenido").innerHTML = `
-    <h2 class="panel-title">Avance Plan de Estudios — ${e.programa}</h2>
-    <div class="aviso">Créditos aprobados: <b>${creditosAprobados}</b> de ${creditosTotalesPrograma} del programa.</div>
-    ${tablasNiveles}
-  `;
+    tablasNiveles += `
+      <section class="student-level-card">
+        <div class="student-level-head">
+          <div>
+            <span>NIVEL ${idx+1}</span>
+            <h3>${escAttr(n)}</h3>
+          </div>
+          <div class="student-level-mini">
+            <b>${pctNivel}%</b>
+            <small>${aprobadasNivel}/${materiasNivel.length} aprobadas</small>
+          </div>
+        </div>
+        <div class="student-level-bar"><i style="width:${pctNivel}%"></i></div>
+        <div class="student-level-meta">
+          <span>✓ ${aprobadasNivel} aprobadas</span>
+          <span>✕ ${reprobadasNivel} reprobadas</span>
+          <span>○ ${pendientesNivel} pendientes</span>
+          <span>🎓 ${creditosNivel} créditos</span>
+        </div>
+        <div class="student-progress-list">${filas}</div>
+      </section>`;
+  });
+
+  if(nivelActual===null && niveles.length) nivelActual=niveles[niveles.length-1];
+
+  const progreso=creditosTotalesPrograma
+    ? Math.round(creditosAprobados/creditosTotalesPrograma*100)
+    : 0;
+
+  const situacion=calcularSituacionAcademica(e.codigo,e.programa);
+  const estadoAcademico=situacion.normalidad?.estado || "Normal";
+
+  document.getElementById("contenido").innerHTML=`
+    <section class="student-progress-shell">
+      <div class="student-progress-hero">
+        <div>
+          <span>PORTAL DEL ESTUDIANTE · PLAN ACADÉMICO</span>
+          <h2>Mi avance académico</h2>
+          <p>${escAttr(e.programa)} · Visualiza cuánto has avanzado, qué materias has aprobado y qué te falta para terminar.</p>
+        </div>
+        <div class="student-progress-hero-badge">
+          <small>PROGRESO TOTAL</small>
+          <b>${progreso}%</b>
+        </div>
+      </div>
+
+      <div class="student-progress-summary">
+        <article><span>🎓</span><b>${creditosAprobados}</b><small>créditos aprobados</small></article>
+        <article><span>📚</span><b>${creditosTotalesPrograma-creditosAprobados}</b><small>créditos restantes</small></article>
+        <article><span>✓</span><b>${materiasAprobadas}</b><small>materias aprobadas</small></article>
+        <article><span>○</span><b>${materiasPendientes}</b><small>materias pendientes</small></article>
+      </div>
+
+      <div class="student-progress-mainbar">
+        <div class="student-progress-mainbar-top">
+          <div><span>AVANCE DEL PROGRAMA</span><b>${creditosAprobados} / ${creditosTotalesPrograma} créditos</b></div>
+          <strong>${progreso}%</strong>
+        </div>
+        <div class="student-progress-bar"><i style="width:${progreso}%"></i></div>
+        <div class="student-progress-foot">
+          <span>📍 Nivel de referencia: <b>${escAttr(nivelActual||"—")}</b></span>
+          <span>Estado académico: <b>${escAttr(estadoAcademico)}</b></span>
+        </div>
+      </div>
+
+      ${materiasReprobadas ? `
+        <div class="student-progress-alert">
+          <b>⚠️ Tienes ${materiasReprobadas} materia(s) reprobada(s).</b>
+          <span>Revisa las materias marcadas en rojo para planear tu próxima matrícula.</span>
+        </div>` : ""}
+
+      <div class="student-progress-section-title">
+        <span>MAPA DEL PROGRAMA</span>
+        <h3>Tu recorrido por niveles</h3>
+        <p>Cada nivel muestra tus materias, créditos y estado actual.</p>
+      </div>
+
+      <div class="student-levels-list">
+        ${tablasNiveles || `<div class="student-empty-notes">No hay niveles registrados.</div>`}
+      </div>
+    </section>`;
 }
 
 function calcularPromedioPonderado(entradas){
@@ -3760,103 +4301,187 @@ function renderConsultaMatriculaNotas(){
 
   if(!registro || registro.estado!=="realizada" || !registro.materias || Object.keys(registro.materias).length===0){
     document.getElementById("contenido").innerHTML=`
-      <h2 class="panel-title">Consulta de Matrícula y Notas</h2>
-      <p>Aún no tienes materias con horario asignado. Revisa "Matricular Materias".</p>
-    `;
+      <section class="student-notes-shell">
+        <div class="student-notes-hero">
+          <span>CONSULTA ACADÉMICA · 2026-2</span>
+          <h2>Mis notas</h2>
+          <p>Aún no tienes materias con horario asignado. Revisa "Matricular Materias".</p>
+        </div>
+      </section>`;
     return;
   }
 
   const gruposPrograma = getGrupos()[e.programa] || {};
-  const creditosPrograma = (getProgramas()[e.programa] || {}).creditos || {};
+  const programasData = getProgramas()[e.programa] || {};
+  const creditosPrograma = programasData.creditos || {};
+  const historial = getHistorial()[e.codigo] || {};
 
-  let entradas = [];
-  Object.keys(registro.materias).forEach(materia=>{
-    const asign = registro.materias[materia];
-    if(asign && typeof asign === "object"){
-      entradas.push({materia, componente:"Teorico", grupoId:asign.Teorico});
-      entradas.push({materia, componente:"Practico", grupoId:asign.Practico});
-    } else {
-      entradas.push({materia, componente:null, grupoId:asign});
+  const materias = Object.keys(registro.materias).map(materia=>{
+    const asign=registro.materias[materia];
+    const componentes=(asign && typeof asign==="object")
+      ? [["Teórico",asign.Teorico],["Práctico",asign.Practico]].filter(([,id])=>id)
+      : [["",asign]];
+    const grupos=componentes.map(([tipo,id])=>({
+      tipo,id,g:(gruposPrograma[materia]||[]).find(x=>x.id===id)
+    })).filter(x=>x.g);
+    const oficiales=grupos.length>0 && grupos.every(x=>!!getActas()[x.id]);
+    const defs=grupos.map(x=>parseFloat(calcularDefinitivaGrupo(x.id,e.codigo))).filter(x=>!isNaN(x));
+    let definitiva=historial[materia]?.definitiva;
+    if(definitiva===undefined && defs.length===grupos.length && defs.length){
+      if(grupos.length===2 && programasData.tipos?.[materia]?.tp){
+        const pct=(programasData.tipos[materia].pctTeorico!==undefined?programasData.tipos[materia].pctTeorico:70)/100;
+        definitiva=defs[0]*pct+defs[1]*(1-pct);
+      }else{
+        definitiva=defs[0];
+      }
     }
+    const metaEdiciones=[];
+    grupos.forEach(x=>{
+      const n=((getNotas()[x.id]||{})[e.codigo])||{};
+      Object.keys(n._meta||{}).forEach(itemId=>{
+        const meta=n._meta[itemId];
+        if(meta?.actor==="coordinador") metaEdiciones.push({...meta,itemId,grupoId:x.id});
+      });
+    });
+    return {materia,grupos,oficiales,definitiva,metaEdiciones,creditos:creditosPrograma[materia]??historial[materia]?.creditos??"-"};
   });
 
-  let filas = entradas.map((en,i)=>{
-    const g = (gruposPrograma[en.materia]||[]).find(x=>x.id===en.grupoId);
-    const etiqueta = en.componente ? ` (${en.componente==='Teorico'?'Teórico':'Práctico'})` : "";
-    return `<tr>
-      <td style="text-align:left">${en.materia}${etiqueta}</td>
-      <td>${g ? g.grupo : "-"}</td>
-      <td>${creditosPrograma[en.materia]!==undefined ? creditosPrograma[en.materia] : "-"}</td>
-      <td><button class="btn-secundario" style="width:auto;padding:6px 14px;font-size:12px" onclick="mostrarNotaMateria(${i})">🔍 Notas Parciales</button></td>
-    </tr>`;
+  const oficialesCount=materias.filter(m=>m.oficiales).length;
+  const promedioPeriodo=(()=> {
+    const vals=materias.filter(m=>m.oficiales && m.definitiva!==undefined).map(m=>({definitiva:parseFloat(m.definitiva),creditos:parseFloat(m.creditos)||0}));
+    const r=calcularPromedioPonderado(vals.filter(x=>x.creditos>0));
+    return r ? r.promedio.toFixed(2) : "—";
+  })();
+
+  const cards=materias.map((m,i)=>{
+    const d=m.definitiva!==undefined && !isNaN(parseFloat(m.definitiva)) ? parseFloat(m.definitiva) : null;
+    const estado=m.oficiales
+      ? (d!==null && d>=3 ? "Aprobada" : "Reprobada")
+      : "En proceso";
+    const estadoClass=m.oficiales ? (d!==null && d>=3 ? "approved" : "failed") : "process";
+    const componentes=m.grupos.map(x=>{
+      const nd=parseFloat(calcularDefinitivaGrupo(x.id,e.codigo));
+      return `<span class="student-component-pill">${x.tipo||"Grupo"} <b>${isNaN(nd)?"—":nd.toFixed(1)}</b></span>`;
+    }).join("");
+    const ultima=m.metaEdiciones.length ? m.metaEdiciones[m.metaEdiciones.length-1] : null;
+    return `
+      <article class="student-note-card">
+        <div class="student-note-card-top">
+          <div>
+            <span class="student-note-kicker">ASIGNATURA</span>
+            <h3>${escAttr(m.materia)}</h3>
+            <p>${m.grupos.map(x=>escAttr(x.g?.docente||"-")).filter((v,i,a)=>a.indexOf(v)===i).join(" · ") || "Docente no registrado"}</p>
+          </div>
+          <span class="student-status ${estadoClass}">${estado}</span>
+        </div>
+        <div class="student-note-info">
+          <span>🎓 ${m.creditos} créditos</span>
+          <span>📌 ${m.grupos.map(x=>`Grupo ${escAttr(x.g?.grupo||"-")}`).join(" · ")}</span>
+          <span>${m.oficiales?"🔒 Oficial":"🕘 Todavía en registro"}</span>
+        </div>
+        <div class="student-components">${componentes || `<span class="student-component-pill">Sin notas</span>`}</div>
+        <div class="student-note-main">
+          <div><small>DEFINITIVA</small><strong>${d===null?"—":d.toFixed(1)}</strong></div>
+          <button type="button" class="student-detail-btn" onclick="mostrarDetalleMateriaEstudiante(${i})">Ver detalle <span>→</span></button>
+        </div>
+        ${ultima ? `<div class="student-coord-edit">✓ Nota corregida por Coordinación · ${escAttr(ultima.nombre||"Coordinación")} · ${escAttr(formatearFechaLimite(ultima.fecha))}</div>` : ""}
+      </article>`;
   }).join("");
 
+  window.__materiasConsultaNueva=materias;
   document.getElementById("contenido").innerHTML=`
-    <h2 class="panel-title">Consulta de Matrícula y Notas</h2>
-    <table>
-      <tr><th>Asignatura</th><th>Grupo</th><th>Créditos</th><th>Notas Parciales</th></tr>
-      ${filas}
-    </table>
-  `;
-
-  window.__materiasConsulta = entradas;
+    <section class="student-notes-shell">
+      <div class="student-notes-hero">
+        <div>
+          <span>PORTAL DEL ESTUDIANTE · 2026-2</span>
+          <h2>Mis calificaciones</h2>
+          <p>Consulta tus notas por asignatura, revisa cómo se calcula la definitiva y distingue las notas oficiales de las que aún están en proceso.</p>
+        </div>
+        <div class="student-notes-summary">
+          <div><b>${oficialesCount}</b><span>oficiales</span></div>
+          <div><b>${materias.length}</b><span>materias</span></div>
+          <div><b>${promedioPeriodo}</b><span>promedio</span></div>
+        </div>
+      </div>
+      <div class="student-notes-legend">
+        <span><i class="student-dot green"></i> Aprobada</span>
+        <span><i class="student-dot red"></i> Reprobada</span>
+        <span><i class="student-dot gold"></i> En proceso</span>
+        <span>🔎 Haz clic en "Ver detalle" para consultar cada ítem.</span>
+      </div>
+      <div class="student-notes-grid">
+        ${cards || `<div class="student-empty-notes">No hay materias para mostrar.</div>`}
+      </div>
+    </section>`;
 }
 
-function mostrarNotaMateria(indice){
-  const e = getEstudiantes()[usuarioActual.codigo];
-  const en = window.__materiasConsulta[indice];
-  const materia = en.materia;
-  const grupoId = en.grupoId;
-  const gruposPrograma = getGrupos()[e.programa] || {};
-  const g = (gruposPrograma[materia]||[]).find(x=>x.id===grupoId);
-  const etiquetaComponente = en.componente ? ` (${en.componente==='Teorico'?'Teórico':'Práctico'})` : "";
+function mostrarDetalleMateriaEstudiante(indice){
+  const e=getEstudiantes()[usuarioActual.codigo];
+  const m=window.__materiasConsultaNueva?.[indice];
+  if(!m) return;
+  const notas=getNotas();
+  const actas=getActas();
 
-  const items = getConfigEvaluacion()[grupoId] || [];
-  const notasEstudiante = ((getNotas()[grupoId]||{})[e.codigo]) || {};
-  const actasSubidas = !!(getActas()[grupoId]);
-
-  let tablaItems;
-  if(items.length===0){
-    tablaItems = `<p style="font-size:13px;color:#666">El docente aún no ha configurado ítems de evaluación para esta materia.</p>`;
-  } else {
-    let filasItems = items.map(it=>{
-      let valorMostrado;
+  const secciones=m.grupos.map(x=>{
+    const items=getConfigEvaluacion()[x.id]||[];
+    const n=((notas[x.id]||{})[e.codigo])||{};
+    const filas=items.length ? items.map(it=>{
+      let valor;
       if(it.tipo==="asistencia"){
-        const v = calcularNotaAsistencia(grupoId, e.codigo);
-        valorMostrado = v===null ? "Sin registrar" : `${v.toFixed(1)} <span style="font-size:11px;color:#999">(auto)</span>`;
-      } else {
-        valorMostrado = (notasEstudiante[it.id]!==undefined && notasEstudiante[it.id]!=="") ? notasEstudiante[it.id] : "Sin registrar";
+        const v=calcularNotaAsistencia(x.id,e.codigo);
+        valor=v===null?"Sin registrar":v.toFixed(1);
+      }else{
+        valor=(n[it.id]!==undefined && n[it.id]!=="") ? n[it.id] : "Sin registrar";
       }
-      return `
-      <tr>
-        <td style="text-align:left">${it.nombre}</td>
+      const meta=metaNotaCoordinador(x.id,e.codigo,it.id);
+      return `<tr>
+        <td>${escAttr(it.nombre)}${meta?`<span class="student-modal-edit">✓ Corregido por Coordinación</span>`:""}</td>
         <td>${it.peso}%</td>
-        <td>${valorMostrado}</td>
-      </tr>
-    `;
-    }).join("");
+        <td><b>${valor}</b></td>
+      </tr>`;
+    }).join("") : `<tr><td colspan="3">El docente aún no configuró los ítems de evaluación.</td></tr>`;
 
-    tablaItems = `
-      <table style="max-width:500px">
-        <tr><th>Ítem</th><th>%</th><th>Nota</th></tr>
-        ${filasItems}
-      </table>
-    `;
-  }
+    const d=calcularDefinitivaGrupo(x.id,e.codigo);
+    return `<div class="student-modal-component">
+      <div class="student-modal-component-head">
+        <div><span>${x.tipo||"GRUPO"}</span><b>Grupo ${escAttr(x.g?.grupo||"-")}</b><small>Docente: ${escAttr(x.g?.docente||"-")}</small></div>
+        <strong>${d||"—"}</strong>
+      </div>
+      <table class="student-modal-table"><thead><tr><th>Ítem</th><th>%</th><th>Nota</th></tr></thead><tbody>${filas}</tbody></table>
+      <div class="student-modal-acta">${actas[x.id] ? "🔒 Acta oficial publicada" : "🕘 Nota todavía en proceso"}</div>
+    </div>`;
+  }).join("");
 
-  const definitiva = calcularDefinitivaGrupo(grupoId, e.codigo);
-  const estadoTexto = !actasSubidas
-    ? `<span style="color:#999">En proceso (aún no son notas oficiales)</span>`
-    : (parseFloat(definitiva) >= 3.0
-        ? `<span style="color:#1e5631;font-weight:bold">Aprobada ✅</span>`
-        : `<span style="color:#a83232;font-weight:bold">Reprobada ❌</span>`);
+  const definitiva=m.definitiva!==undefined ? parseFloat(m.definitiva) : NaN;
+  const estado=m.oficiales
+    ? (isNaN(definitiva)?"Sin definitiva":definitiva>=3?"Aprobada ✅":"Reprobada ❌")
+    : "En proceso · todavía no es oficial";
 
   abrirModal(`
-    <h3 style="margin-top:0">Notas — ${materia}${etiquetaComponente}</h3>
-    <p style="font-size:13px;color:#666">Grupo ${g?g.grupo:"-"} · Docente: ${g?g.docente:"-"}</p>
-    ${tablaItems}
-    <p><b>Definitiva: ${definitiva || "Sin registrar"}</b> — ${estadoTexto}</p>
-  `);
+    <div class="student-grade-modal">
+      <span class="student-note-kicker">DETALLE DE CALIFICACIÓN</span>
+      <h2>${escAttr(m.materia)}</h2>
+      <p>Créditos: <b>${escAttr(m.creditos)}</b> · Estado: <b>${estado}</b></p>
+      ${secciones}
+      <div class="student-modal-final"><span>DEFINITIVA</span><b>${isNaN(definitiva)?"—":definitiva.toFixed(1)}</b></div>
+      ${m.metaEdiciones.length ? `<div class="student-coord-edit">🛡️ Esta asignatura tiene una o más notas corregidas por Coordinación.</div>` : ""}
+    </div>`);
+}
+
+/* Compatibilidad con el botón antiguo y enlaces que todavía puedan invocar
+   mostrarNotaMateria(index). */
+function mostrarNotaMateria(indice){
+  const nuevas=window.__materiasConsultaNueva;
+  if(nuevas && nuevas[indice]){
+    mostrarDetalleMateriaEstudiante(indice);
+    return;
+  }
+  const e=getEstudiantes()[usuarioActual.codigo];
+  const en=window.__materiasConsulta?.[indice];
+  if(!en) return;
+  const m={materia:en.materia,grupos:[{tipo:en.componente||"",id:en.grupoId,g:(getGrupos()[e.programa]?.[en.materia]||[]).find(x=>x.id===en.grupoId)}],oficiales:!!getActas()[en.grupoId],definitiva:calcularDefinitivaGrupo(en.grupoId,e.codigo),creditos:"-" ,metaEdiciones:[]};
+  window.__materiasConsultaNueva=[m];
+  mostrarDetalleMateriaEstudiante(0);
 }
 
 /* ======================================================================
@@ -4222,228 +4847,307 @@ function renderMatricularMaterias(){
   const registro = getMatriculas()[e.codigo];
   const abiertas = !!(getEstadoMatriculas()[e.programa]);
 
-  /* Caso 0: quedó con evaluación docente obligatoria pendiente del semestre anterior */
+  /* Bloqueo por evaluación docente pendiente */
   if(!registro){
-    const pend = getEvaluacionPendiente()[e.codigo];
+    const pend=getEvaluacionPendiente()[e.codigo];
     if(pend && pend.pendiente){
       document.getElementById("contenido").innerHTML=`
-        <h2 class="panel-title">Matrícula — ${e.programa}</h2>
-        <div class="aviso aviso-error">
-          🔒 No puedes solicitar matrícula todavía: quedaste con <b>evaluación docente pendiente y obligatoria</b>
-          del semestre anterior${pend.detalle && pend.detalle.length ? ` (${pend.detalle.join(", ")})` : ""}.
-          Esa evaluación ya no está disponible porque el semestre cerró; contacta a
-          <b>Coordinación Académica</b> para que te habilite la matrícula.
-        </div>
-      `;
+        <section class="student-enroll-shell">
+          <div class="student-enroll-hero">
+            <span>MATRÍCULA ACADÉMICA · ${escAttr(e.programa)}</span>
+            <h2>Matricular materias</h2>
+            <p>Tu solicitud está temporalmente bloqueada.</p>
+          </div>
+          <div class="student-enroll-alert error">
+            🔒 Tienes una <b>evaluación docente pendiente y obligatoria</b> del semestre anterior
+            ${pend.detalle && pend.detalle.length ? `(${pend.detalle.join(", ")})` : ""}.
+            Contacta a <b>Coordinación Académica</b> para que revise tu caso.
+          </div>
+        </section>`;
       return;
     }
   }
 
-  /* Caso 1: el horario ya fue generado por el Coordinador */
-  if(registro && registro.estado === "realizada"){
-    const materiasMatriculadas = Object.keys(registro.materias || {});
-    const gruposPrograma = getGrupos()[e.programa] || {};
+  /* Ya tiene horario generado */
+  if(registro && registro.estado==="realizada"){
+    const materiasMatriculadas=Object.keys(registro.materias||{});
+    const gruposPrograma=getGrupos()[e.programa]||{};
+    const cards=[];
 
-    let filas = "";
     materiasMatriculadas.forEach(materia=>{
-      const asign = registro.materias[materia];
-      if(asign && typeof asign === "object"){
-        const gT = (gruposPrograma[materia]||[]).find(x=>x.id===asign.Teorico);
-        const gP = (gruposPrograma[materia]||[]).find(x=>x.id===asign.Practico);
-        filas += `<tr>
-          <td>${materia} (Teórico)</td>
-          <td>${gT ? gT.grupo : "-"}</td>
-          <td>${gT ? gT.docente : "-"}</td>
-          <td style="text-align:left">${gT ? resumenBloques(gT.bloques) : "-"}</td>
-        </tr>`;
-        filas += `<tr>
-          <td>${materia} (Práctico)</td>
-          <td>${gP ? gP.grupo : "-"}</td>
-          <td>${gP ? gP.docente : "-"}</td>
-          <td style="text-align:left">${gP ? resumenBloques(gP.bloques) : "-"}</td>
-        </tr>`;
-      } else {
-        const g = (gruposPrograma[materia]||[]).find(x=>x.id===asign);
-        filas += `<tr>
-          <td>${materia}</td>
-          <td>${g ? g.grupo : "-"}</td>
-          <td>${g ? g.docente : "-"}</td>
-          <td style="text-align:left">${g ? resumenBloques(g.bloques) : "-"}</td>
-        </tr>`;
+      const asign=registro.materias[materia];
+      if(asign && typeof asign==="object"){
+        [["Teórico",asign.Teorico],["Práctico",asign.Practico]].forEach(([tipo,id])=>{
+          if(!id) return;
+          const g=(gruposPrograma[materia]||[]).find(x=>x.id===id);
+          if(g) cards.push(`
+            <article class="student-schedule-card">
+              <div class="student-schedule-top">
+                <div><span>${escAttr(tipo)}</span><h3>${escAttr(materia)}</h3></div>
+                <strong>Grupo ${escAttr(g.grupo||"-")}</strong>
+              </div>
+              <div class="student-schedule-info">
+                <span>👨‍🏫 ${escAttr(g.docente||"-")}</span>
+                <span>📍 ${escAttr(resumenBloques(g.bloques))}</span>
+              </div>
+            </article>`);
+        });
+      }else{
+        const g=(gruposPrograma[materia]||[]).find(x=>x.id===asign);
+        cards.push(`
+          <article class="student-schedule-card">
+            <div class="student-schedule-top">
+              <div><span>ASIGNATURA</span><h3>${escAttr(materia)}</h3></div>
+              <strong>Grupo ${escAttr(g?.grupo||"-")}</strong>
+            </div>
+            <div class="student-schedule-info">
+              <span>👨‍🏫 ${escAttr(g?.docente||"-")}</span>
+              <span>📍 ${escAttr(g ? resumenBloques(g.bloques) : "-")}</span>
+            </div>
+          </article>`);
       }
     });
 
-    let avisoSinCupo = "";
-    if(registro.materiasSinCupo && registro.materiasSinCupo.length){
-      avisoSinCupo = `<div class="aviso aviso-error">Estas materias no tenían cupo disponible cuando se generó el horario: ${registro.materiasSinCupo.join(", ")}. Habla con el Coordinador Académico.</div>`;
-    }
-
-    if(!filas) filas = `<tr><td colspan="4">No te quedó ninguna materia asignada.</td></tr>`;
+    const avisoSinCupo=registro.materiasSinCupo?.length
+      ? `<div class="student-enroll-alert error">⚠️ Estas materias quedaron sin cupo: <b>${registro.materiasSinCupo.map(escAttr).join(", ")}</b>. Habla con Coordinación.</div>`
+      : "";
 
     document.getElementById("contenido").innerHTML=`
-      <h2 class="panel-title">Matrícula — ${e.programa}</h2>
-      <div class="aviso">Tu horario ya fue generado por el Coordinador Académico. La matrícula solo se hace una vez.</div>
-      ${avisoSinCupo}
-      <table>
-        <tr><th>Materia</th><th>Grupo asignado</th><th>Docente</th><th>Horario</th></tr>
-        ${filas}
-      </table>
-    `;
+      <section class="student-enroll-shell">
+        <div class="student-enroll-hero">
+          <div>
+            <span>MATRÍCULA ACADÉMICA · ${escAttr(e.programa)}</span>
+            <h2>Mi horario matriculado</h2>
+            <p>Tu matrícula fue procesada por Coordinación. Esta pantalla es tu resumen de materias, grupos y horarios.</p>
+          </div>
+          <div class="student-enroll-hero-badge"><small>ESTADO</small><b>✓ REALIZADA</b></div>
+        </div>
+        ${avisoSinCupo}
+        <div class="student-enroll-section-title"><span>PERIODO ACTUAL</span><h3>Materias matriculadas</h3><p>${materiasMatriculadas.length} asignaturas registradas.</p></div>
+        <div class="student-schedule-grid">${cards.join("") || `<div class="student-empty-notes">No te quedó ninguna materia asignada.</div>`}</div>
+      </section>`;
     return;
   }
 
-  /* Caso 2: ya envió su solicitud, pero el Coordinador aún no genera horarios */
-  if(registro && registro.estado === "solicitada"){
+  /* Solicitud enviada, esperando generación de horario */
+  if(registro && registro.estado==="solicitada"){
+    const solicitadas=registro.materiasSolicitadas||[];
     document.getElementById("contenido").innerHTML=`
-      <h2 class="panel-title">Matrícula — ${e.programa}</h2>
-      <div class="aviso">
-        Ya enviaste tu solicitud de matrícula. Está <b>pendiente</b> de que el Coordinador Académico cierre
-        matrículas y genere los horarios. Cuando eso pase, aquí mismo verás tu grupo asignado.
-      </div>
-      <p><b>Materias solicitadas:</b></p>
-      <ul>${(registro.materiasSolicitadas||[]).map(m=>`<li>${m}</li>`).join("")}</ul>
-    `;
+      <section class="student-enroll-shell">
+        <div class="student-enroll-hero">
+          <div>
+            <span>MATRÍCULA ACADÉMICA · ${escAttr(e.programa)}</span>
+            <h2>Solicitud enviada</h2>
+            <p>Tu selección quedó registrada y está pendiente de que Coordinación genere los grupos y horarios.</p>
+          </div>
+          <div class="student-enroll-hero-badge pending"><small>ESTADO</small><b>◷ PENDIENTE</b></div>
+        </div>
+        <div class="student-enroll-alert">✓ La solicitud solo se envía una vez. Cuando Coordinación genere tu horario, aquí aparecerán tus grupos.</div>
+        <div class="student-enroll-section-title"><span>TU SELECCIÓN</span><h3>Materias solicitadas</h3><p>${solicitadas.length} materia(s) seleccionada(s).</p></div>
+        <div class="student-request-list">
+          ${solicitadas.map((m,i)=>`<div><span>${String(i+1).padStart(2,"0")}</span><b>${escAttr(m)}</b><small>Solicitud registrada</small></div>`).join("")}
+        </div>
+      </section>`;
     return;
   }
 
-  /* Caso 3: las matrículas están cerradas y el estudiante nunca solicitó nada */
+  /* Matrícula cerrada sin solicitud */
   if(!abiertas){
     document.getElementById("contenido").innerHTML=`
-      <h2 class="panel-title">Matrícula — ${e.programa}</h2>
-      <div class="aviso aviso-error">
-        Las matrículas de ${e.programa} están cerradas y no enviaste ninguna solicitud.
-        Esto significa que no cursarás materias este semestre. Si crees que es un error,
-        contacta al Coordinador Académico de tu programa.
-      </div>
-    `;
+      <section class="student-enroll-shell">
+        <div class="student-enroll-hero">
+          <span>MATRÍCULA ACADÉMICA · ${escAttr(e.programa)}</span>
+          <h2>Matricular materias</h2>
+          <p>El periodo de matrícula no está disponible actualmente.</p>
+        </div>
+        <div class="student-enroll-alert error">
+          Las matrículas de <b>${escAttr(e.programa)}</b> están cerradas y no enviaste ninguna solicitud.
+          Si crees que es un error, contacta a Coordinación Académica.
+        </div>
+      </section>`;
     return;
   }
 
-  /* Caso 4: matrículas abiertas y el estudiante aún no ha solicitado nada */
-  const dataPrograma = getProgramas()[e.programa];
-  const gruposPrograma = getGrupos()[e.programa] || {};
+  const dataPrograma=getProgramas()[e.programa];
+  const gruposPrograma=getGrupos()[e.programa]||{};
 
   if(!dataPrograma || !dataPrograma.niveles || Object.keys(dataPrograma.niveles).length===0){
-    document.getElementById("contenido").innerHTML=`<h2 class="panel-title">Matricular Materias</h2><p>El Director de Escuela aún no ha publicado el plan de estudios de ${e.programa}.</p>`;
+    document.getElementById("contenido").innerHTML=`
+      <section class="student-enroll-shell">
+        <div class="student-enroll-hero"><span>PLAN ACADÉMICO</span><h2>Matricular materias</h2></div>
+        <div class="student-enroll-alert error">El Director de Escuela aún no ha publicado el plan de estudios de ${escAttr(e.programa)}.</div>
+      </section>`;
     return;
   }
 
-  const situacion = calcularSituacionAcademica(e.codigo, e.programa);
+  const situacion=calcularSituacionAcademica(e.codigo,e.programa);
 
   if(situacion.expulsado){
     document.getElementById("contenido").innerHTML=`
-      <h2 class="panel-title">Matricular Materias — ${e.programa}</h2>
-      <div class="aviso aviso-error">
-        🚫 Estás <b>por fuera de la universidad (PFU)</b> por bajo rendimiento académico sostenido:
-        tu promedio acumulado estuvo por debajo de 3.2 durante 3 semestres consecutivos.
-        No puedes matricular materias. Comunícate con la Coordinación Académica.
-      </div>
-    `;
+      <section class="student-enroll-shell">
+        <div class="student-enroll-hero"><span>SITUACIÓN ACADÉMICA</span><h2>Matricular materias</h2></div>
+        <div class="student-enroll-alert error">🚫 Estás <b>por fuera de la universidad (PFU)</b> por bajo rendimiento académico sostenido. No puedes matricular materias. Comunícate con Coordinación Académica.</div>
+      </section>`;
     return;
   }
 
   if(situacion.graduado){
     document.getElementById("contenido").innerHTML=`
-      <h2 class="panel-title">Matricular Materias — ${e.programa}</h2>
-      <div class="aviso">🎓 Ya aprobaste todas las materias del plan de estudios. No tienes materias pendientes por matricular.</div>
-    `;
+      <section class="student-enroll-shell">
+        <div class="student-enroll-hero"><span>FELICITACIONES · ${escAttr(e.programa)}</span><h2>Plan completado</h2></div>
+        <div class="student-enroll-success">🎓 Ya aprobaste todas las materias del plan de estudios. No tienes materias pendientes por matricular.</div>
+      </section>`;
     return;
   }
 
-  const historialEstudiante = getHistorial()[e.codigo] || {};
+  const historialEstudiante=getHistorial()[e.codigo]||{};
 
-  const filasAtrasadas = situacion.pendientesAtrasadas.map(materia=>{
-    const cred = situacion.creditosDe(materia);
+  const filasAtrasadas=situacion.pendientesAtrasadas.map((materia)=>{
+    const cred=situacion.creditosDe(materia);
     if(!situacion.prerequisitosCumplidos(materia)){
-      return `<tr><td>${materia}</td><td>${cred}</td><td style="color:#a83232">Requisito no cumplido: ${situacion.prerequisitosFaltantes(materia).join(", ")}</td></tr>`;
+      return `<article class="student-enroll-subject blocked">
+        <div><span class="student-subject-tag">REQUISITO</span><h4>${escAttr(materia)}</h4><small>${cred} créditos</small></div>
+        <b>⚠ ${escAttr(situacion.prerequisitosFaltantes(materia).join(", "))}</b>
+      </article>`;
     }
-    if(esMateriaElectivaSlot(e.programa, materia)){
-      const idxAtr = situacion.pendientesAtrasadasDisponibles.indexOf(materia);
-      const opciones = opcionesDeSlotDisponibles(e.programa, materia, historialEstudiante)
-        .filter(op=>materiaTieneGruposCompletos(e.programa, gruposPrograma, op.nombre));
-      if(opciones.length===0){
-        return `<tr><td>${materia}</td><td>${cred}</td><td style="color:#999">Sin cursos de catálogo disponibles todavía (pídele al Coordinador que programe grupos)</td></tr>`;
-      }
-      const opts = opciones.map(op=>`<option value="${op.nombre}">${op.nombre}</option>`).join("");
-      return `<tr><td>${materia} <span style="font-size:11px;color:#666">(electiva)</span></td><td>${cred}</td><td>Elige el curso: <select id="mm_atr_${idxAtr}">${opts}</select></td></tr>`;
-    }
-    if(!materiaTieneGruposCompletos(e.programa, gruposPrograma, materia)){
-      return `<tr><td>${materia}</td><td>${cred}</td><td style="color:#999">Sin grupos programados todavía${esMateriaTP(e.programa,materia)?" (falta Teórico y/o Práctico)":""}</td></tr>`;
-    }
-    return `<tr><td>${materia}</td><td>${cred}</td><td style="color:#a83232">Repetición obligatoria (perdida antes)</td></tr>`;
-  }).join("") || `<tr><td colspan="3" style="color:#999">No tienes materias atrasadas 🎉</td></tr>`;
 
-  const opcionalesTodas = [
-    ...situacion.materiasNivelActual.map(m=>({materia:m, tipo:"nivel"})),
-    ...(situacion.bono>0 ? situacion.materiasNivelSiguiente.map(m=>({materia:m, tipo:"adelantada"})) : [])
+    if(esMateriaElectivaSlot(e.programa,materia)){
+      const opciones=opcionesDeSlotDisponibles(e.programa,materia,historialEstudiante)
+        .filter(op=>materiaTieneGruposCompletos(e.programa,gruposPrograma,op.nombre));
+      if(!opciones.length){
+        return `<article class="student-enroll-subject blocked">
+          <div><span class="student-subject-tag">ELECTIVA ATRASADA</span><h4>${escAttr(materia)}</h4><small>${cred} créditos</small></div>
+          <b>Sin cursos de catálogo disponibles.</b>
+        </article>`;
+      }
+      const idxAtr=situacion.pendientesAtrasadas.indexOf(materia);
+      const opts=opciones.map(op=>`<option value="${escAttr(op.nombre)}">${escAttr(op.nombre)}</option>`).join("");
+      return `<article class="student-enroll-subject mandatory">
+        <div><span class="student-subject-tag">OBLIGATORIA</span><h4>${escAttr(materia)}</h4><small>${cred} créditos · electiva</small></div>
+        <label>Elige el curso<select id="mm_atr_${idxAtr}">${opts}</select></label>
+      </article>`;
+    }
+
+    if(!materiaTieneGruposCompletos(e.programa,gruposPrograma,materia)){
+      return `<article class="student-enroll-subject blocked">
+        <div><span class="student-subject-tag">OBLIGATORIA</span><h4>${escAttr(materia)}</h4><small>${cred} créditos</small></div>
+        <b>Sin grupos programados todavía${esMateriaTP(e.programa,materia)?" (falta Teórico y/o Práctico)":""}.</b>
+      </article>`;
+    }
+
+    return `<article class="student-enroll-subject mandatory">
+      <div><span class="student-subject-tag">OBLIGATORIA</span><h4>${escAttr(materia)}</h4><small>${cred} créditos · repetición</small></div>
+      <b>Se matricula automáticamente</b>
+    </article>`;
+  }).join("");
+
+  const opcionalesTodas=[
+    ...situacion.materiasNivelActual.map(m=>({materia:m,tipo:"nivel"})),
+    ...(situacion.bono>0 ? situacion.materiasNivelSiguiente.map(m=>({materia:m,tipo:"adelantada"})) : [])
   ];
-  const opcionalesDisponibles = materiasOpcionalesDeMatricula(situacion);
+  const opcionalesDisponibles=materiasOpcionalesDeMatricula(situacion);
 
-  const filasOpcionales = opcionalesTodas.map(op=>{
-    const materia = op.materia;
-    const cred = situacion.creditosDe(materia);
-    const etiqueta = op.tipo==="adelantada" ? "Adelantada (bono)" : `Nivel actual (${situacion.nivelActual})`;
+  const filasOpcionales=opcionalesTodas.map(op=>{
+    const materia=op.materia;
+    const cred=situacion.creditosDe(materia);
+    const etiqueta=op.tipo==="adelantada" ? "Adelantada · bono" : `Nivel actual · ${situacion.nivelActual}`;
+
     if(!situacion.prerequisitosCumplidos(materia)){
-      return `<tr><td>${materia}</td><td>${cred}</td><td style="color:#a83232">Requisito no cumplido: ${situacion.prerequisitosFaltantes(materia).join(", ")}</td><td>${etiqueta}</td></tr>`;
+      return `<article class="student-enroll-subject blocked">
+        <div><span class="student-subject-tag">BLOQUEADA</span><h4>${escAttr(materia)}</h4><small>${cred} créditos</small></div>
+        <b>Requisito: ${escAttr(situacion.prerequisitosFaltantes(materia).join(", "))}</b>
+        <small>${escAttr(etiqueta)}</small>
+      </article>`;
     }
-    const i = opcionalesDisponibles.indexOf(materia);
-    if(esMateriaElectivaSlot(e.programa, materia)){
-      const opciones = opcionesDeSlotDisponibles(e.programa, materia, historialEstudiante)
-        .filter(op2=>materiaTieneGruposCompletos(e.programa, gruposPrograma, op2.nombre));
-      if(opciones.length===0){
-        return `<tr><td>${materia} <span style="font-size:11px;color:#666">(electiva)</span></td><td>${cred}</td><td style="color:#999">Sin cursos de catálogo disponibles</td><td>${etiqueta}</td></tr>`;
+
+    const i=opcionalesDisponibles.indexOf(materia);
+
+    if(esMateriaElectivaSlot(e.programa,materia)){
+      const opciones=opcionesDeSlotDisponibles(e.programa,materia,historialEstudiante)
+        .filter(op2=>materiaTieneGruposCompletos(e.programa,gruposPrograma,op2.nombre));
+      if(!opciones.length){
+        return `<article class="student-enroll-subject blocked">
+          <div><span class="student-subject-tag">ELECTIVA</span><h4>${escAttr(materia)}</h4><small>${cred} créditos</small></div>
+          <b>Sin cursos de catálogo disponibles.</b>
+          <small>${escAttr(etiqueta)}</small>
+        </article>`;
       }
-      const opts = `<option value="">-- No matricular --</option>` + opciones.map(o=>`<option value="${o.nombre}">${o.nombre}</option>`).join("");
-      return `<tr>
-        <td>${materia} <span style="font-size:11px;color:#666">(electiva)</span></td><td>${cred}</td>
-        <td><select id="mm_op_${i}" data-creditos="${cred}" onchange="actualizarContadorMatricula(${situacion.creditosRestantesParaElegir})">${opts}</select></td>
-        <td style="font-size:12px">${etiqueta}</td>
-      </tr>`;
+      const opts=`<option value="">No matricular</option>`+opciones.map(o=>`<option value="${escAttr(o.nombre)}">${escAttr(o.nombre)}</option>`).join("");
+      return `<article class="student-enroll-subject selectable">
+        <div><span class="student-subject-tag">${op.tipo==="adelantada"?"BONO":"ELECTIVA"}</span><h4>${escAttr(materia)}</h4><small>${cred} créditos</small></div>
+        <label>Curso<select id="mm_op_${i}" data-creditos="${cred}" onchange="actualizarContadorMatricula(${situacion.creditosRestantesParaElegir})">${opts}</select></label>
+        <small>${escAttr(etiqueta)}</small>
+      </article>`;
     }
-    if(!materiaTieneGruposCompletos(e.programa, gruposPrograma, materia)){
-      return `<tr><td>${materia}</td><td>${cred}</td><td style="color:#999">Sin grupos programados${esMateriaTP(e.programa,materia)?" (falta Teórico y/o Práctico)":""}</td><td>${etiqueta}</td></tr>`;
+
+    if(!materiaTieneGruposCompletos(e.programa,gruposPrograma,materia)){
+      return `<article class="student-enroll-subject blocked">
+        <div><span class="student-subject-tag">SIN GRUPO</span><h4>${escAttr(materia)}</h4><small>${cred} créditos</small></div>
+        <b>Sin grupos programados${esMateriaTP(e.programa,materia)?" (falta Teórico y/o Práctico)":""}.</b>
+        <small>${escAttr(etiqueta)}</small>
+      </article>`;
     }
-    return `<tr>
-      <td>${materia}</td><td>${cred}</td>
-      <td><input type="checkbox" id="mm_op_${i}" data-creditos="${cred}" onchange="actualizarContadorMatricula(${situacion.creditosRestantesParaElegir})"></td>
-      <td style="font-size:12px">${etiqueta}</td>
-    </tr>`;
+
+    return `<label class="student-enroll-selectable-card">
+      <input type="checkbox" id="mm_op_${i}" data-creditos="${cred}" onchange="actualizarContadorMatricula(${situacion.creditosRestantesParaElegir})">
+      <span class="student-enroll-check"></span>
+      <div><span class="student-subject-tag">${op.tipo==="adelantada"?"BONO":"NIVEL ACTUAL"}</span><h4>${escAttr(materia)}</h4><small>${cred} créditos · ${escAttr(etiqueta)}</small></div>
+      <strong>+</strong>
+    </label>`;
   }).join("");
 
   document.getElementById("contenido").innerHTML=`
-    <h2 class="panel-title">Matricular Materias — ${e.programa}</h2>
-    <div id="avisoMatriculaEstudiante"></div>
-    ${situacion.normalidad.estado==="Condicional" ? `
-      <div class="aviso aviso-error">
-        ⚠️ Estás en <b>condición académica CONDICIONAL</b> (semestre ${situacion.normalidad.semestresCondicional} de 2 permitidos)
-        — tu promedio acumulado sigue por debajo de 3.2. Por normatividad, este semestre solo tienes derecho a
-        <b>máximo 12 créditos</b>. Si tu promedio acumulado sigue por debajo de 3.2 al terminar este semestre,
-        quedarás <b>por fuera de la universidad (PFU)</b>.
+    <section class="student-enroll-shell">
+      <div class="student-enroll-hero">
+        <div>
+          <span>MATRÍCULA ACADÉMICA · ${escAttr(e.programa)}</span>
+          <h2>Elige tus materias</h2>
+          <p>Organiza tu próxima matrícula de forma clara. Las materias atrasadas son prioritarias y las demás se seleccionan según tus créditos disponibles.</p>
+        </div>
+        <div class="student-enroll-credit-counter">
+          <small>CRÉDITOS PARA ELEGIR</small>
+          <b id="creditosRestantesLabel">${situacion.creditosRestantesParaElegir}</b>
+          <span>disponibles</span>
+        </div>
       </div>
-    ` : ``}
-    <div class="aviso">
-      Las matrículas están abiertas. Solo puedes enviar tu solicitud <b>una vez</b>.<br>
-      Avanzas a <b>${situacion.nivelActual}</b>. Créditos de este nivel: <b>${situacion.creditosBase}</b>
-      ${situacion.bono>0 ? ` + <b>${situacion.bono}</b> de bono` : ``}
-      ${situacion.creditosBacklog>0 ? ` − <b>${situacion.creditosBacklog}</b> usados por materias atrasadas` : ``}
-      = <b>${situacion.creditosRestantesParaElegir}</b> créditos disponibles para elegir abajo.
-      ${situacion.creditosBacklog>0 ? `<br><span style="color:#a83232">Como tienes materias atrasadas, es posible que no te alcancen los créditos para ver todas las materias de tu nivel: elige cuáles ver.</span>` : ``}
-    </div>
 
-    <h3>Materias atrasadas (obligatorias, se matriculan solas)</h3>
-    <table>
-      <tr><th>Materia</th><th>Créditos</th><th>Estado</th></tr>
-      ${filasAtrasadas}
-    </table>
+      ${situacion.normalidad.estado==="Condicional" ? `
+        <div class="student-enroll-alert warning">
+          ⚠️ Estás en <b>condición académica CONDICIONAL</b> (${situacion.normalidad.semestresCondicional} de 2 permitidos). Este semestre tienes máximo <b>12 créditos</b>.
+        </div>` : ""}
 
-    <h3 style="margin-top:20px">Elige tus materias — créditos disponibles: <span id="creditosRestantesLabel" style="color:#1e5631">${situacion.creditosRestantesParaElegir}</span></h3>
-    <table>
-      <tr><th>Materia</th><th>Créditos</th><th>Solicitar</th><th>Tipo</th></tr>
-      ${filasOpcionales || `<tr><td colspan="4" style="color:#999">No hay materias disponibles todavía.</td></tr>`}
-    </table>
+      <div id="avisoMatriculaEstudiante"></div>
 
-    <button onclick="guardarMatriculaEstudiante()">Enviar Solicitud de Matrícula (definitiva)</button>
-  `;
+      <div class="student-enroll-rule">
+        <div><b>${escAttr(situacion.nivelActual)}</b><span>Nivel actual</span></div>
+        <div><b>${situacion.creditosBase}</b><span>créditos base</span></div>
+        ${situacion.bono>0 ? `<div><b>+${situacion.bono}</b><span>créditos de bono</span></div>` : ""}
+        ${situacion.creditosBacklog>0 ? `<div><b>−${situacion.creditosBacklog}</b><span>por atrasadas</span></div>` : ""}
+      </div>
+
+      <div class="student-enroll-section-title">
+        <span>PRIORIDAD ACADÉMICA</span>
+        <h3>Materias atrasadas</h3>
+        <p>Estas materias se consideran primero y, cuando tienen grupo disponible, se matriculan automáticamente.</p>
+      </div>
+      <div class="student-enroll-subject-list">
+        ${filasAtrasadas || `<div class="student-enroll-empty">🎉 No tienes materias atrasadas.</div>`}
+      </div>
+
+      <div class="student-enroll-section-title">
+        <span>SELECCIÓN DEL SEMESTRE</span>
+        <h3>Materias disponibles</h3>
+        <p>Haz clic en una tarjeta para seleccionarla. El contador de créditos se actualiza al instante.</p>
+      </div>
+      <div class="student-enroll-selection-grid">
+        ${filasOpcionales || `<div class="student-enroll-empty">No hay materias disponibles todavía.</div>`}
+      </div>
+
+      <div class="student-enroll-submit">
+        <div><b>¿Terminaste tu selección?</b><span>Revisa tus materias antes de enviar. La solicitud solo se puede enviar una vez.</span></div>
+        <button type="button" onclick="guardarMatriculaEstudiante()">Enviar solicitud definitiva →</button>
+      </div>
+    </section>`;
 }
 
 function actualizarContadorMatricula(limite){
@@ -4776,6 +5480,10 @@ async function intentarPublicarHistorial(programaNombre, materia, codigo){
 }
 
 function subirActas(programaNombre, grupoId, materia){
+  if(usuarioActual?.rol==="docente" && !docentePuedeEditarNotas(programaNombre,grupoId)){
+    abrirModal(`<div class="status-modal"><h2>Registro cerrado</h2><p>La fecha límite para docentes ya venció o el acta ya está publicada. Las notas quedan en solo lectura.</p><div class="status-modal-live">⏰ Límite: ${formatearFechaLimite(getFechaLimiteDocentes(programaNombre))}</div></div>`);
+    return;
+  }
   pedirConfirmacion("Vas a subir las actas de \"" + materia + "\" — las notas quedarán oficiales en el historial de cada estudiante. ¿Continuar?", async function(){
     const estudiantes = estudiantesDeGrupo(programaNombre, materia, grupoId);
     const actas = getActas();
@@ -4803,6 +5511,10 @@ function subirActas(programaNombre, grupoId, materia){
 }
 
 function reabrirActas(grupoId){
+  if(usuarioActual?.rol!=="coordinador"){
+    abrirModal(`<div class="status-modal"><h2>Acta protegida</h2><p>Los docentes no pueden reabrir actas. Solicita la corrección a Coordinación Académica.</p></div>`);
+    return;
+  }
   pedirConfirmacion("¿Reabrir las actas de este grupo para corregir notas? El estudiante seguirá viendo la última nota oficial hasta que subas actas de nuevo.", async function(){
     const actas = getActas();
     actas[grupoId] = false;
@@ -5708,7 +6420,9 @@ function renderPanelGrupoCentroNotas(programa,materia,g){
 
   const promedio=cnt?(sum/cnt).toFixed(2):"—";
   const pct=es.length?Math.round(complete/es.length*100):0;
-  const puede=peso===100 && es.length && !acta;
+  const limiteVigente = limiteDocenteVigente(programa);
+  const puedeEditarDocente = usuarioActual?.rol!=="docente" || docentePuedeEditarNotas(programa,g.id);
+  const puede=peso===100 && es.length && !acta && puedeEditarDocente;
 
   const filas=es.map(e=>{
     const n=((ns[g.id]||{})[e.codigo])||{};
@@ -5729,8 +6443,9 @@ function renderPanelGrupoCentroNotas(programa,materia,g){
           id="nota_${escAttr(g.id)}_${escAttr(e.codigo)}_${escAttr(i.id)}"
           type="number" min="0" max="5" step="0.1"
           value="${v!==undefined?v:""}"
-          ${acta?"disabled":""}
-          onchange="guardarNotaItem('${escAttr(g.id)}','${escAttr(e.codigo)}','${escAttr(i.id)}',this.value);marcarGuardadoNotaPro(this)"
+          ${(acta || !puedeEditarDocente)?"disabled":""}
+          oninput="previsualizarNotaPro(this,'${escAttr(g.id)}','${escAttr(e.codigo)}','${escAttr(i.id)}')"
+          onchange="guardarNotaItem('${escAttr(g.id)}','${escAttr(e.codigo)}','${escAttr(i.id)}',this.value).then(()=>marcarGuardadoNotaPro(this))"
           onkeydown="navegarNotaPro(event,this)">
         <span class="nc-save"></span>
       </td>`;
@@ -5742,7 +6457,7 @@ function renderPanelGrupoCentroNotas(programa,materia,g){
         <span class="nc-code">${e.codigo}</span>
       </td>
       ${celdas}
-      <td class="nc-def">${isNaN(d)?"—":d.toFixed(1)}</td>
+      <td class="nc-def" id="definitiva_${escAttr(g.id)}_${escAttr(e.codigo)}">${isNaN(d)?"—":d.toFixed(1)}</td>
       <td><span class="nc-status ${cl}">${st}</span></td>
     </tr>`;
   }).join("");
@@ -5780,9 +6495,9 @@ function renderPanelGrupoCentroNotas(programa,materia,g){
           </button>
 
           ${acta
-            ? `<button type="button" class="nc-btn" onclick="reabrirActas('${escAttr(g.id)}')">
-                 ↺ Reabrir acta
-               </button>`
+            ? (usuarioActual?.rol==="coordinador"
+              ? `<button type="button" class="nc-btn" onclick="reabrirActas('${escAttr(g.id)}')">↺ Reabrir acta</button>`
+              : `<b class="nc-readonly-chip">✓ Acta oficial · Solo lectura</b>`)
             : (puede
               ? `<button type="button" class="nc-btn primary" onclick="subirActas('${escAttr(programa)}','${escAttr(g.id)}','${escAttr(materia)}')">
                    🔒 Cerrar y publicar acta
@@ -5790,6 +6505,12 @@ function renderPanelGrupoCentroNotas(programa,materia,g){
               : "")}
         </div>
       </section>
+
+      ${usuarioActual?.rol==="docente" && !limiteVigente
+        ? `<div class="nc-deadline-lock">🔒 <b>Fecha límite vencida.</b> Ya no puedes modificar ni cerrar esta acta. Puedes consultar las notas. Coordinación puede corregirlas durante todo el semestre.</div>`
+        : usuarioActual?.rol==="docente" && getFechaLimiteDocentes(programa)
+          ? `<div class="nc-deadline-info">⏰ <b>Registro docente abierto hasta:</b> ${formatearFechaLimite(getFechaLimiteDocentes(programa))} (hora Colombia).</div>`
+          : ""}
 
       <div class="nc-stats">
         <div class="nc-stat">
@@ -5953,6 +6674,26 @@ function filtrarEstudiantesNotasPro(v){
   document.querySelectorAll("#tbodyNotasPro tr").forEach(r=>{
     r.style.display=!q || r.innerText.toLowerCase().includes(q) ? "" : "none";
   });
+}
+
+function previsualizarNotaPro(input,grupoId,codigo,itemId){
+  if(input.disabled) return;
+  const notas=getNotas();
+  if(!notas[grupoId]) notas[grupoId]={};
+  if(!notas[grupoId][codigo]) notas[grupoId][codigo]={};
+  notas[grupoId][codigo][itemId]=input.value;
+  localStorage.setItem("uan_notas",JSON.stringify(notas));
+  const definitiva=calcularDefinitivaGrupo(grupoId,codigo);
+  const definitivaEl=document.getElementById(`definitiva_${grupoId}_${codigo}`);
+  if(definitivaEl) definitivaEl.textContent=definitiva||"—";
+  const row=definitivaEl?.closest("tr");
+  const statusEl=row?.querySelector(".nc-status");
+  if(statusEl){
+    const d=parseFloat(definitiva);
+    statusEl.textContent=isNaN(d)?"Pendiente":d>=3?"Va aprobando":"Va reprobando";
+    statusEl.className="nc-status "+(isNaN(d)?"nc-warn":d>=3?"nc-ok":"nc-bad");
+    statusEl.title="Resultado provisional en tiempo real";
+  }
 }
 
 function marcarGuardadoNotaPro(input){
@@ -6133,10 +6874,24 @@ function renderAsistenciaEstudiante(){
 }
 
 async function guardarNotaItem(grupoId, codigo, itemId, valor){
+  const grupo = String(grupoId);
+  const programa = usuarioActual?.programa || "";
+  if(usuarioActual?.rol==="docente" && !docentePuedeEditarNotas(programa,grupo)){
+    abrirModal(`<div class="status-modal"><h2>Edición no disponible</h2><p>El periodo de registro de notas para docentes ya terminó o el acta está publicada. Puedes consultar las notas, pero no modificarlas.</p><div class="status-modal-live">⏰ Límite: ${formatearFechaLimite(getFechaLimiteDocentes(programa))}</div></div>`);
+    return false;
+  }
   const notas = getNotas();
   if(!notas[grupoId]) notas[grupoId]={};
   if(!notas[grupoId][codigo]) notas[grupoId][codigo]={};
   notas[grupoId][codigo][itemId] = valor;
+  // Si el docente vuelve a editar una nota, la última modificación deja de
+  // aparecer como corrección de Coordinación.
+  if(!notas[grupoId][codigo]._meta) notas[grupoId][codigo]._meta={};
+  notas[grupoId][codigo]._meta[itemId]={
+    actor:"docente",
+    nombre:usuarioActual?.nombre || "Docente",
+    fecha:new Date().toISOString()
+  };
 
   // La copia local se actualiza inmediatamente para que la definitiva responda al instante.
   localStorage.setItem("uan_notas", JSON.stringify(notas));
@@ -6172,6 +6927,7 @@ async function guardarNotaItem(grupoId, codigo, itemId, valor){
     saveEl.style.color = ok ? "#1e5631" : "#b54708";
     setTimeout(()=>{ if(saveEl) saveEl.textContent=""; }, 2200);
   }
+  return ok;
 }
 
 function renderCambiarPasswordDocente(){
