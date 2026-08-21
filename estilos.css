@@ -3541,3 +3541,16 @@ body.rol-estudiante #dashboard .uan-home-head .panel-title{color:#945b0a!importa
 /* V22 — nota enlazada Teórico/Práctico */
 .nc-linked-grade{background:#eef6ff !important;border-left:3px solid #2f5f8f !important;}
 .nc-linked-grade b{color:#1f5f91;}
+
+/* V23 — sincronización y notas TP automáticas */
+.nc-linked-grade{background:#f3f7f4;border-radius:10px;padding:8px 4px;min-width:130px}
+.nc-linked-grade b{font-size:16px;color:#1e5631}
+.nc-linked-grade .nc-note{display:block;margin-top:3px;font-size:10px;color:#66756c}
+.sync-progress-modal{width:min(440px,100%);text-align:center;padding:10px 4px 4px}
+.sync-progress-icon{width:48px;height:48px;margin:0 auto 10px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#edf7ef;color:#1e5631;font-size:24px;font-weight:800}
+.sync-progress-modal h2{margin:0 0 8px;color:#102019;font-size:20px}
+.sync-progress-modal p{margin:0 auto 18px;color:#66756c;font-size:13px;line-height:1.5}
+.sync-progress-track{height:12px;border-radius:99px;background:#e8eee9;overflow:hidden;border:1px solid #dce4de}
+.sync-progress-fill{height:100%;border-radius:99px;transition:width .25s ease}
+.sync-progress-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:9px;color:#66756c;font-size:11px}
+.sync-progress-row b{font-size:18px;color:#1e5631}

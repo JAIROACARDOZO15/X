@@ -40,6 +40,8 @@ let sincronizacionEnCurso = false;
 const SYNC_NOTAS_PENDIENTES = "uan_sync_pendientes_notas";
 const SYNC_ACTAS_PENDIENTES = "uan_sync_pendientes_actas";
 const SYNC_HISTORIAL_PENDIENTES = "uan_sync_pendientes_historial";
+const SYNC_CONFIG_PENDIENTES = "uan_sync_pendientes_config";
+let cierreActaEnCurso = false;
 
 function getPendientesSync(key){
   try { return JSON.parse(localStorage.getItem(key) || "[]"); }
@@ -546,7 +548,11 @@ async function sincronizarActasEvaluacionHistorialDesdeSupabase(){
           obj[row.grupo_id]=row.data;
         }
       });
-      localStorage.setItem("uan_config_evaluacion", JSON.stringify(obj));
+      // Si este navegador acaba de modificar la configuración, no la reemplaces
+      // con una copia remota que todavía puede estar unos milisegundos atrás.
+      if(localStorage.getItem(SYNC_CONFIG_PENDIENTES)!=="1"){
+        localStorage.setItem("uan_config_evaluacion", JSON.stringify(obj));
+      }
       if(configActasRemota){
         localStorage.setItem("uan_config_actas", JSON.stringify(configActasRemota));
       }
@@ -613,18 +619,30 @@ async function empujarActasASupabase(obj){
     }
   }catch(err){ console.error("No se pudo guardar actas en Supabase:", err); }
 }
+let configSyncChain = Promise.resolve();
 async function empujarConfigEvaluacionASupabase(obj){
-  if(!supabaseClient) return;
-  try{
-    await supabaseClient.from("config_evaluacion").delete().neq("grupo_id","___ninguno___");
-    const filas = Object.keys(obj).map(grupoId=>({grupo_id:grupoId, data:obj[grupoId]}));
+  if(!supabaseClient) return false;
+  localStorage.setItem(SYNC_CONFIG_PENDIENTES,"1");
+  const snapshot = JSON.parse(JSON.stringify(obj));
+  configSyncChain = configSyncChain.then(async()=>{
+    try{
+    const { error:delError } = await supabaseClient.from("config_evaluacion").delete().neq("grupo_id","___ninguno___");
+    if(delError) throw delError;
+    const filas = Object.keys(snapshot).map(grupoId=>({grupo_id:grupoId, data:snapshot[grupoId]}));
     const configActas = getConfigActas();
     filas.push({grupo_id:"__GLOBAL_ACTAS__", data:configActas});
     if(filas.length){
       const { error } = await supabaseClient.from("config_evaluacion").insert(filas);
-      if(error) console.error("No se pudo guardar config_evaluacion en Supabase:", error);
+      if(error) throw error;
     }
-  }catch(err){ console.error("No se pudo guardar config_evaluacion en Supabase:", err); }
+    localStorage.removeItem(SYNC_CONFIG_PENDIENTES);
+    return true;
+    }catch(err){
+      console.error("No se pudo guardar config_evaluacion en Supabase:", err);
+      return false;
+    }
+  });
+  return await configSyncChain;
 }
 async function empujarEvaluacionesDocenteASupabase(obj){
   if(!supabaseClient) return;
@@ -792,6 +810,9 @@ function descripcionMetaNota(grupoId,codigo,itemId){
 function getConfigEvaluacion(){ return JSON.parse(localStorage.getItem("uan_config_evaluacion") || "{}"); }
 function saveConfigEvaluacion(obj){
   localStorage.setItem("uan_config_evaluacion", JSON.stringify(obj));
+  // Marca la configuración como pendiente antes de enviarla. Así una lectura
+  // automática de Supabase no puede borrar una modificación recién hecha.
+  localStorage.setItem(SYNC_CONFIG_PENDIENTES,"1");
   empujarConfigEvaluacionASupabase(obj);
 }
 
@@ -849,9 +870,10 @@ function calcularPromedioAcumulado(codigo){
 }
 
 /* Normalidad académica:
-   - Promedio acumulado 3.2 a 5.0  -> Normal
-   - Promedio acumulado 0.0 a 3.19 -> Condicional (máximo 12 créditos ese semestre)
-   - 3 semestres CONSECUTIVOS por debajo de 3.2 -> PFU (Por Fuera de la Universidad), definitivo
+   - Promedio acumulado 3.21 a 5.0 -> Normal
+   - Promedio acumulado 0.0 a 3.20 -> Condicional (máximo 12 créditos ese semestre)
+   - Hasta 3 semestres CONSECUTIVOS en condición -> Condicional 1/2/3
+   - Un 4.º cierre consecutivo por debajo de 3.21 -> PFU, definitivo
    Se recalcula una sola vez por estudiante cada vez que se abre un nuevo semestre. */
 function actualizarNormalidadEstudiante(codigo){
   const normalidad = getNormalidadEstudiantes();
@@ -868,11 +890,16 @@ function actualizarNormalidadEstudiante(codigo){
   }
 
   let nuevo;
-  if(promedio >= 3.2){
+  // La condición se supera únicamente al alcanzar 3.21 o más.
+  // 1er semestre bajo 3.21 -> Condicional 1
+  // 2do semestre consecutivo bajo 3.21 -> Condicional 2
+  // 3er semestre consecutivo bajo 3.21 -> Condicional 3
+  // Si al siguiente cierre sigue bajo 3.21 -> PFU.
+  if(promedio >= 3.21){
     nuevo = { estado:"Normal", semestresCondicional:0 };
   } else {
     const semestresCondicional = (actual.semestresCondicional||0) + 1;
-    nuevo = (semestresCondicional >= 3)
+    nuevo = (semestresCondicional >= 4)
       ? { estado:"PFU", semestresCondicional }
       : { estado:"Condicional", semestresCondicional };
   }
@@ -1311,6 +1338,9 @@ async function sincronizarTodoSilencioso(){
   try{
     // Primero se intenta vaciar lo que este dispositivo todavía debe al servidor.
     await Promise.all([vaciarColaNotasPendientes(),vaciarColaActasPendientes(),vaciarColaHistorialPendiente()]);
+    if(localStorage.getItem(SYNC_CONFIG_PENDIENTES)==="1"){
+      await empujarConfigEvaluacionASupabase(getConfigEvaluacion());
+    }
     await Promise.all([
       sincronizarUsuariosDesdeSupabase(),
       sincronizarProgramasDesdeSupabase(),
@@ -4291,7 +4321,7 @@ function renderPromedioEstudiante(){
       if(n.estado==="PFU"){
         avisoNormalidad = `<div class="aviso aviso-error" style="margin-top:15px">🚫 Estás <b>por fuera de la universidad (PFU)</b> por bajo rendimiento académico sostenido.</div>`;
       } else if(n.estado==="Condicional"){
-        avisoNormalidad = `<div class="aviso aviso-error" style="margin-top:15px">⚠️ Estás en <b>condición académica CONDICIONAL</b> (semestre ${n.semestresCondicional} de 2 permitidos) — tu promedio acumulado está por debajo de 3.2.</div>`;
+        avisoNormalidad = `<div class="aviso aviso-error" style="margin-top:15px">⚠️ Estás en <b>condición académica CONDICIONAL</b> (semestre ${n.semestresCondicional} de 3 permitidos) — tu promedio acumulado está por debajo de 3.2.</div>`;
       }
       const avisoBono = (s.bono>0)
         ? `<div class="aviso" style="margin-top:15px">🎉 Tu promedio acumulado es superior a 3.6: tienes <b>${s.bono} créditos de bono</b> para adelantar materias del siguiente nivel en tu próxima matrícula.</div>`
@@ -4309,9 +4339,18 @@ function abrirModal(html){
   document.getElementById("modalFondo").classList.add("abierto");
 }
 function cerrarModal(){
+  if(cierreActaEnCurso) return;
   document.getElementById("modalFondo").classList.remove("abierto");
   document.getElementById("modalContenido").innerHTML = "";
 }
+
+window.addEventListener("beforeunload", function(e){
+  if(cierreActaEnCurso){
+    e.preventDefault();
+    e.returnValue="El acta todavía se está subiendo a Supabase. No cierres la página.";
+    return e.returnValue;
+  }
+});
 
 function renderConsultaMatriculaNotas(){
   const e = getEstudiantes()[usuarioActual.codigo];
@@ -5587,37 +5626,67 @@ async function intentarPublicarHistorial(programaNombre, materia, codigo){
   return await empujarFilaHistorialASupabase(codigo, historial[codigo]);
 }
 
-function subirActas(programaNombre, grupoId, materia){
+function mostrarProgresoSupabase(porcentaje, detalle, estado="subiendo"){
+  const pct=Math.max(0,Math.min(100,Math.round(porcentaje)));
+  const color=estado==="error"?"#b42318":estado==="ok"?"#1e5631":"#2e8b57";
+  abrirModal(`<div class="sync-progress-modal">
+    <div class="sync-progress-icon">${estado==="ok"?"✓":estado==="error"?"⚠":"↻"}</div>
+    <h2>${estado==="ok"?"Sincronización completada":estado==="error"?"Sincronización pendiente":"Subiendo base a Supabase"}</h2>
+    <p>${detalle}</p>
+    <div class="sync-progress-track"><div class="sync-progress-fill" style="width:${pct}%;background:${color}"></div></div>
+    <div class="sync-progress-row"><b>${pct}%</b><span>${estado==="subiendo"?"Por favor, no te salgas de la plataforma.":estado==="ok"?"Datos guardados correctamente.":"Se conservaron los datos locales y se reintentará la sincronización."}</span></div>
+  </div>`);
+  const close=document.querySelector("#modalFondo .modal-cerrar");
+  if(close) close.style.display="none";
+}
+
+async function subirActas(programaNombre, grupoId, materia){
   if(usuarioActual?.rol==="docente" && !docentePuedeEditarNotas(programaNombre,grupoId)){
     abrirModal(`<div class="status-modal"><h2>Registro cerrado</h2><p>La fecha límite para docentes ya venció o el acta ya está publicada. Las notas quedan en solo lectura.</p><div class="status-modal-live">⏰ Límite: ${formatearFechaLimite(getFechaLimiteDocentes(programaNombre))}</div></div>`);
     return;
   }
-  pedirConfirmacion("Vas a subir las actas de \"" + materia + "\" — las notas quedarán oficiales en el historial de cada estudiante. ¿Continuar?", async function(){
-    const estudiantes = estudiantesDeGrupo(programaNombre, materia, grupoId);
-    const actas = getActas();
-    actas[grupoId] = true;
-    localStorage.setItem("uan_actas", JSON.stringify(actas));
-    agregarPendienteSync(SYNC_ACTAS_PENDIENTES, grupoId);
+  pedirConfirmacion("Vas a cerrar y publicar el acta de \"" + materia + "\". Las notas quedarán oficiales en el historial de cada estudiante. ¿Continuar?", async function(){
+    cierreActaEnCurso=true;
+    mostrarProgresoSupabase(0,"Preparando el cierre del acta...");
+    try{
+      const estudiantes = estudiantesDeGrupo(programaNombre, materia, grupoId);
+      const actas = getActas();
+      actas[grupoId] = true;
+      localStorage.setItem("uan_actas", JSON.stringify(actas));
+      agregarPendienteSync(SYNC_ACTAS_PENDIENTES, grupoId);
+      mostrarProgresoSupabase(15,"Guardando el estado del acta en Supabase...");
 
-    // Primero garantiza el acta en el servidor. Después publica las notas oficiales.
-    const actaGuardada = await empujarFilaActaASupabase(grupoId, true);
-    if(!actaGuardada && supabaseClient){
-      const continuar = confirm("No se pudo confirmar el cierre del acta con el servidor.\n\nPara evitar perder notas, no se publicará todavía. Revisa la conexión e inténtalo de nuevo.\n\n¿Quieres continuar solo con la copia local?");
-      if(!continuar){ renderNotasDocente(); return; }
-    }
+      const actaGuardada = await empujarFilaActaASupabase(grupoId, true);
+      if(!actaGuardada && supabaseClient){
+        mostrarProgresoSupabase(15,"No se pudo confirmar todavía con Supabase. Los datos locales están protegidos y se reintentará automáticamente.","error");
+        setTimeout(()=>{ cerrarModal(); },2600);
+        return;
+      }
 
-    const resultados = await Promise.all(
-      estudiantes.map(e=>intentarPublicarHistorial(programaNombre, materia, e.codigo))
-    );
-    const fallidas = resultados.filter(ok=>ok===false).length;
+      mostrarProgresoSupabase(35,`Acta guardada. Publicando ${estudiantes.length} nota(s) oficial(es)...`);
+      let fallidas=0;
+      for(let i=0;i<estudiantes.length;i++){
+        const ok=await intentarPublicarHistorial(programaNombre,materia,estudiantes[i].codigo);
+        if(ok===false) fallidas++;
+        const pct=35+Math.round(((i+1)/Math.max(1,estudiantes.length))*55);
+        mostrarProgresoSupabase(pct,`Publicando historial: ${i+1} de ${estudiantes.length} estudiante(s)...`);
+      }
 
-    renderNotasDocente();
-    if(fallidas){
-      alert(`⚠️ El acta quedó guardada, pero ${fallidas} estudiante(s) todavía no pudieron recibir su nota oficial en Supabase.\n\nEl sistema los dejó en una cola de sincronización y volverá a intentarlo automáticamente. No cierres el navegador hasta ver que la sincronización termine.`);
+      if(fallidas){
+        mostrarProgresoSupabase(100,`El acta quedó cerrada, pero ${fallidas} historial(es) quedaron pendientes. Se reintentará automáticamente.`,"error");
+      }else{
+        mostrarProgresoSupabase(100,"Acta e historiales publicados correctamente.","ok");
+      }
+      setTimeout(()=>{ cerrarModal(); renderNotasDocente(); },1800);
+    }catch(err){
+      console.error("Error cerrando acta:",err);
+      mostrarProgresoSupabase(100,"Ocurrió un error de sincronización. Los datos locales quedaron guardados y se reintentará automáticamente.","error");
+      setTimeout(()=>{ cerrarModal(); renderNotasDocente(); },3000);
+    }finally{
+      cierreActaEnCurso=false;
     }
   });
 }
-
 function reabrirActas(grupoId){
   const ctx=buscarContextoGrupo(grupoId);
   const programa=ctx?.programa || usuarioActual?.programa || "";
@@ -6548,6 +6617,11 @@ function renderPanelGrupoCentroNotas(programa,materia,g){
     const cl=st==="Va aprobando"?"nc-ok":st==="Va reprobando"?"nc-bad":"nc-warn";
 
     const celdas=its.map(i=>{
+      if(i.tipo==="componente_practico"){
+        const v=notaPracticaParaTeoria(g.id,e.codigo);
+        const practica=grupoPracticoPareja(g.id);
+        return `<td class="nc-linked-grade"><b>${isNaN(v)?"—":v.toFixed(1)}</b><br><span class="nc-note">${practica ? (getActas()[practica.id] ? "Acta práctica · oficial" : "Acta práctica · pendiente") : "Sin grupo práctico"}</span></td>`;
+      }
       if(i.tipo==="asistencia"){
         const v=calcularNotaAsistencia(g.id,e.codigo);
         return `<td><b>${v===null?"—":v.toFixed(1)}</b><br><span class="nc-note">automática</span></td>`;
