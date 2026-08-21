@@ -4839,6 +4839,7 @@ function cambiarProgramaCentroNotas(programa){
   s.programa = programa || "";
   s.materia = "";
   s.grupoId = "";
+  s.selectorCompleto = true;
   renderNotasDocente();
 }
 
@@ -4846,13 +4847,22 @@ function cambiarMateriaCentroNotas(materia){
   const s = estadoCentroNotas();
   s.materia = materia || "";
   s.grupoId = "";
+  s.selectorCompleto = true;
   renderNotasDocente();
 }
 
 function abrirGrupoCentroNotas(grupoId, materia){
   const s = estadoCentroNotas();
-  s.materia = materia || s.materia || "";
-  s.grupoId = grupoId || "";
+  const id = String(grupoId || "");
+  const mat = materia || s.materia || "";
+
+  if(!id){
+    console.warn("Centro de notas: se intentó abrir un grupo sin ID", {grupoId, materia});
+    return;
+  }
+
+  s.materia = mat;
+  s.grupoId = id;
   s.selectorCompleto = false;
   renderNotasDocente();
 }
@@ -4864,14 +4874,55 @@ function volverGruposCentroNotas(){
   renderNotasDocente();
 }
 
-/* Compatibilidad explícita con onclick y con navegadores que recrean el DOM. */
+/* Estas funciones se usan desde HTML dinámico. */
 window.cambiarProgramaCentroNotas = cambiarProgramaCentroNotas;
 window.cambiarMateriaCentroNotas = cambiarMateriaCentroNotas;
-window.abrirGrupoCentroNotas = function(grupoId, materia){
-  try { return abrirGrupoCentroNotas(grupoId, materia); }
-  catch (err) { console.error("No se pudo abrir el grupo de notas:", err); }
-};
+window.abrirGrupoCentroNotas = abrirGrupoCentroNotas;
 window.volverGruposCentroNotas = volverGruposCentroNotas;
+
+/*
+ * Navegación del Centro de Notas mediante delegación de eventos.
+ * No dependemos de onclick inline ni de volver a registrar listeners cada vez
+ * que renderNotasDocente() reemplaza #contenido.innerHTML.
+ */
+function instalarNavegacionCentroNotas(){
+  if(window.__uanCentroNotasEventosInstalados) return;
+  window.__uanCentroNotasEventosInstalados = true;
+
+  document.addEventListener("click", function(ev){
+    const btn = ev.target && ev.target.closest
+      ? ev.target.closest("[data-notas-grupo]")
+      : null;
+    if(!btn) return;
+
+    const contenido = document.getElementById("contenido");
+    if(!contenido || !contenido.contains(btn)) return;
+
+    ev.preventDefault();
+    ev.stopPropagation();
+
+    abrirGrupoCentroNotas(
+      btn.getAttribute("data-notas-grupo") || "",
+      btn.getAttribute("data-notas-materia") || ""
+    );
+  }, true);
+
+  document.addEventListener("change", function(ev){
+    const el = ev.target;
+    if(!el || !el.id) return;
+
+    if(el.id === "ncPrograma"){
+      cambiarProgramaCentroNotas(el.value);
+      return;
+    }
+
+    if(el.id === "ncMateria"){
+      cambiarMateriaCentroNotas(el.value);
+    }
+  }, true);
+}
+
+instalarNavegacionCentroNotas();
 
 function renderNotasDocente(){
   const programas = programasDelDocente();
@@ -4880,147 +4931,118 @@ function renderNotasDocente(){
   const actas = getActas();
   const s = estadoCentroNotas();
 
-  /* Selector completo: permite cambiar de materia Y de grupo.
-     Antes, si una materia tenía un solo grupo, el render lo seleccionaba
-     inmediatamente y el botón "Cambiar grupo" parecía no hacer nada. */
-  if(s.selectorCompleto){
-    const todasLasMaterias = [];
-    programas.forEach(programa => {
-      const gpSel = gruposTodo[programa] || {};
-      Object.keys(gpSel).forEach(materiaSel => {
-        (gpSel[materiaSel] || []).filter(g => g.docente === usuarioActual.nombre).forEach(g => {
-          todasLasMaterias.push({programa, materia:materiaSel, grupo:g});
-        });
-      });
-    });
-
-    const cardsSelector = todasLasMaterias.map(({programa,materia,grupo:g})=>`
-      <button type="button" class="nc-group nc-group-selector"
-        data-notas-grupo="${escAttr(g.id)}" data-notas-materia="${escAttr(materia)}">
-        <div class="nc-group-top">
-          <div>
-            <span class="nc-kicker">${escAttr(programa)}</span>
-            <h3>${escAttr(materia)}</h3>
-            <p>${g.componente ? (g.componente==='Teorico'?'Teórico':'Práctico')+' · ' : ''}Grupo ${escAttr(g.grupo || '-')}</p>
-          </div>
-          <span class="nc-open">Abrir →</span>
-        </div>
-        <div class="nc-group-meta">
-          <span>${estudiantesDeGrupo(programa,materia,g.id).length} estudiantes</span>
-          <span>${actas[g.id] ? 'Acta publicada' : 'Acta pendiente'}</span>
-        </div>
-      </button>`).join('');
-
-    document.getElementById("contenido").innerHTML=`
-      <style>${estilosCentroNotas()}</style>
-      <div class="nc-panel">
-        <div class="nc-breadcrumb"><b>Centro de calificaciones</b><span>›</span><span>Mis materias y grupos</span></div>
-        <section class="nc-head nc-selector-head">
-          <div>
-            <span class="nc-eyebrow">DOCENTE · ${escAttr(usuarioActual.nombre || '')}</span>
-            <h1>Mis materias y grupos</h1>
-            <p>Selecciona exactamente la materia y el grupo que quieres administrar.</p>
-          </div>
-        </section>
-        <div class="nc-selector-grid">${cardsSelector || '<div class="nc-empty">No tienes grupos asignados.</div>'}</div>
+  /* ---------------------------------------------------------------
+     1. Normalizar programa y materia antes de pintar.
+     --------------------------------------------------------------- */
+  if(!programas.length){
+    document.getElementById("contenido").innerHTML = `
+      <div class="nc-empty">
+        <h3>No hay programas asignados</h3>
+        <p>Este docente no tiene materias o grupos asignados.</p>
       </div>`;
-
-    document.querySelectorAll("[data-notas-grupo]").forEach(btn => {
-      btn.addEventListener("click", function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        abrirGrupoCentroNotas(this.dataset.notasGrupo || "", this.dataset.notasMateria || "");
-      });
-    });
     return;
   }
 
   if(!programas.includes(s.programa)){
-    s.programa = programas[0] || "";
+    s.programa = programas[0];
     s.materia = "";
     s.grupoId = "";
   }
 
   const gp = gruposTodo[s.programa] || {};
   const materias = Object.keys(gp).filter(m =>
-    (gp[m] || []).some(g => g.docente === usuarioActual.nombre)
+    (gp[m] || []).some(g => g && g.docente === usuarioActual.nombre)
   );
 
+  if(!materias.length){
+    document.getElementById("contenido").innerHTML = `
+      <style>${estilosCentroNotas()}</style>
+      <div class="nc-shell">
+        <div class="nc-empty">
+          <h3>No hay materias asignadas</h3>
+          <p>No se encontraron grupos cuyo docente sea <b>${escAttr(usuarioActual.nombre || "")}</b>.</p>
+        </div>
+      </div>`;
+    return;
+  }
+
   if(!materias.includes(s.materia)){
-    s.materia = materias[0] || "";
+    s.materia = materias[0];
     s.grupoId = "";
   }
 
   const grupos = (gp[s.materia] || []).filter(
-    g => g.docente === usuarioActual.nombre
+    g => g && g.docente === usuarioActual.nombre
   );
 
-  if(!grupos.some(g => g.id === s.grupoId)){
-    s.grupoId = grupos.length === 1 ? grupos[0].id : "";
+  /* ---------------------------------------------------------------
+     2. Si ya hay un grupo seleccionado, abrir SIEMPRE ese grupo.
+        Nunca lo seleccionamos automáticamente por tener un solo grupo.
+     --------------------------------------------------------------- */
+  if(!s.selectorCompleto && s.grupoId){
+    const grupoSeleccionado = grupos.find(g => String(g.id) === String(s.grupoId));
+    if(grupoSeleccionado){
+      renderPanelGrupoCentroNotas(s.programa, s.materia, grupoSeleccionado);
+      return;
+    }
+
+    /* El ID ya no existe en la materia actual: volvemos al selector. */
+    s.grupoId = "";
+    s.selectorCompleto = true;
   }
 
-  const g = grupos.find(x => x.id === s.grupoId);
-
-  if(g){
-    renderPanelGrupoCentroNotas(s.programa, s.materia, g);
-    return;
-  }
-
-  const cards = grupos.map(x => {
-    const es = estudiantesDeGrupo(s.programa, s.materia, x.id);
-    const its = configs[x.id] || [];
+  /* ---------------------------------------------------------------
+     3. Tarjetas de los grupos de la materia seleccionada.
+     El click se atiende por delegación de eventos global.
+     --------------------------------------------------------------- */
+  const cards = grupos.map(g => {
+    const es = estudiantesDeGrupo(s.programa, s.materia, g.id);
+    const its = configs[g.id] || [];
     const ns = getNotas();
 
     let done = 0;
     es.forEach(e => {
-      const n = ((ns[x.id] || {})[e.codigo]) || {};
+      const n = ((ns[g.id] || {})[e.codigo]) || {};
       const manuales = its.filter(i => i.tipo !== "asistencia");
-      if(manuales.length === 0 ||
-         manuales.every(i => n[i.id] !== undefined && n[i.id] !== "")){
+      if(manuales.length === 0 || manuales.every(i => n[i.id] !== undefined && n[i.id] !== "")){
         done++;
       }
     });
 
     const pct = es.length ? Math.round(done / es.length * 100) : 0;
-    const acta = !!actas[x.id];
-    const componente = x.componente
-      ? (x.componente === "Teorico" ? "Teórico" : "Práctico")
+    const acta = !!actas[g.id];
+    const componente = g.componente
+      ? (g.componente === "Teorico" ? "Teórico" : "Práctico")
       : "Grupo regular";
 
     return `
       <button type="button"
               class="nc-group"
-              data-notas-grupo="${escAttr(x.id)}"
+              data-notas-grupo="${escAttr(g.id)}"
               data-notas-materia="${escAttr(s.materia)}"
-              aria-label="Abrir grupo ${escAttr(x.grupo || "-")}">
+              aria-label="Abrir ${escAttr(s.materia)} grupo ${escAttr(g.grupo || "-")}">
         <div class="nc-group-top">
           <div>
             <span class="nc-kicker">GRUPO</span>
-            <h3>${x.grupo || "-"}</h3>
+            <h3>${escAttr(g.grupo || "-")}</h3>
             <p>${componente}</p>
           </div>
-          <span class="nc-arrow">→</span>
+          <span class="nc-arrow">Abrir →</span>
         </div>
-
         <div class="nc-group-meta">
           <span>👥 ${es.length} estudiantes</span>
           <span>📊 ${pct}%</span>
         </div>
-
         <div class="nc-progress"><i style="width:${pct}%"></i></div>
-
         <div class="nc-group-foot">
-          <span>${x.horario || "Horario no registrado"}</span>
-          ${acta
-            ? '<b class="nc-chip ok">✓ Acta subida</b>'
-            : '<b class="nc-chip">● En edición</b>'}
+          <span>${escAttr(g.horario || "Horario no registrado")}</span>
+          ${acta ? '<b class="nc-chip ok">✓ Acta subida</b>' : '<b class="nc-chip">● En edición</b>'}
         </div>
       </button>`;
   }).join("");
 
   document.getElementById("contenido").innerHTML = `
     <style>${estilosCentroNotas()}</style>
-
     <div class="nc-shell">
       <section class="nc-hero">
         <div class="nc-hero-copy">
@@ -5034,9 +5056,8 @@ function renderNotasDocente(){
             <span>Programa académico</span>
             <select id="ncPrograma">
               ${programas.map(p => `
-                <option value="${escAttr(p)}" ${p === s.programa ? "selected" : ""}>
-                  ${p}
-                </option>`).join("")}
+                <option value="${escAttr(p)}" ${p === s.programa ? "selected" : ""}>${escAttr(p)}</option>
+              `).join("")}
             </select>
           </label>
 
@@ -5045,8 +5066,9 @@ function renderNotasDocente(){
             <select id="ncMateria">
               ${materias.map(m => `
                 <option value="${escAttr(m)}" ${m === s.materia ? "selected" : ""}>
-                  ${m} · ${(gp[m] || []).filter(x => x.docente === usuarioActual.nombre).length} grupo(s)
-                </option>`).join("")}
+                  ${escAttr(m)} · ${(gp[m] || []).filter(x => x && x.docente === usuarioActual.nombre).length} grupo(s)
+                </option>
+              `).join("")}
             </select>
           </label>
         </div>
@@ -5055,7 +5077,7 @@ function renderNotasDocente(){
       <section class="nc-section-head">
         <div>
           <span class="nc-eyebrow">MIS GRUPOS</span>
-          <h2>${s.materia || "Mis materias"}</h2>
+          <h2>${escAttr(s.materia || "Mis materias")}</h2>
           <p>${grupos.length} grupo(s) disponibles para este docente.</p>
         </div>
       </section>
@@ -5065,28 +5087,10 @@ function renderNotasDocente(){
           <div class="nc-empty">
             <div class="nc-empty-icon">📚</div>
             <h3>No hay grupos disponibles</h3>
-            <p>Selecciona otra materia o verifica que el grupo esté asignado a este docente.</p>
+            <p>Esta materia no tiene grupos asignados a ${escAttr(usuarioActual.nombre || "este docente")}.</p>
           </div>`}
       </div>
     </div>`;
-
-  document.querySelectorAll("[data-notas-grupo]").forEach(btn => {
-    btn.addEventListener("click", function(ev){
-      ev.preventDefault();
-      ev.stopPropagation();
-      abrirGrupoCentroNotas(this.dataset.notasGrupo || "", this.dataset.notasMateria || "");
-    });
-  });
-
-  document.getElementById("ncPrograma")?.addEventListener(
-    "change",
-    e => cambiarProgramaCentroNotas(e.target.value)
-  );
-
-  document.getElementById("ncMateria")?.addEventListener(
-    "change",
-    e => cambiarMateriaCentroNotas(e.target.value)
-  );
 }
 
 function estilosCentroNotas(){ return `
