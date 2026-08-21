@@ -1349,6 +1349,7 @@ async function sincronizarTodoSilencioso(){
       sincronizarActasEvaluacionHistorialDesdeSupabase(),
       sincronizarAsistenciaDesdeSupabase()
     ]);
+    marcarSyncExitosa();
   }finally{
     sincronizacionEnCurso=false;
   }
@@ -1475,6 +1476,9 @@ function renderSidebar(){
       <div class="menu-item" onclick="renderVerGrupos()">Ver Grupos Programados <span>›</span></div>
       <div class="menu-item" onclick="renderGestionMatriculas()">Abrir / Cerrar Matrículas <span>›</span></div>
       <div class="menu-item" onclick="renderNotasCoordinador()">📝 Notas y correcciones <span>›</span></div>
+      <div class="menu-item" onclick="renderMonitoreoAcademico()">📈 Monitoreo académico <span>›</span></div>
+      <div class="menu-item" onclick="renderAuditoriaNotas()">🕵️ Historial de cambios <span>›</span></div>
+      <div class="menu-item" onclick="renderEstadoSincronizacion()">☁️ Estado de sincronización <span>›</span></div>
       <div class="menu-item" onclick="renderConfigActasCoordinador()">⏰ Fecha límite de actas <span>›</span></div>
       <div class="menu-item" onclick="renderInclusiones()">Inclusiones (cambios manuales) <span>›</span></div>
     `;
@@ -1495,6 +1499,104 @@ function renderSidebar(){
     `;
     renderHomeDashboard();
   }
+}
+
+/* ======================================================================
+   UAN V25 — CENTRO DE ATENCIÓN DEL DASHBOARD
+   Usa únicamente información que ya existe en el sistema. No crea tablas
+   nuevas ni altera la lógica académica: agrega contexto, alertas y accesos.
+   ====================================================================== */
+function progresoCreditosDashboard(codigo, programa){
+  const data=getProgramas()[programa]||{};
+  const niveles=data.niveles||{};
+  const creditos=data.creditos||{};
+  const hist=getHistorial()[codigo]||{};
+  let total=0, aprobados=0;
+  Object.keys(niveles).forEach(n=>{
+    (niveles[n]||[]).forEach(m=>{
+      const c=Number(creditos[m]??3)||3;
+      total+=c;
+      if(hist[m]?.aprobada) aprobados+=c;
+    });
+  });
+  return {total,aprobados,porcentaje:total?Math.min(100,(aprobados/total)*100):0};
+}
+
+function construirAlertasDashboard(){
+  const rol=usuarioActual?.rol||"";
+  const alertas=[];
+  if(rol==="estudiante"){
+    const e=getEstudiantes()[usuarioActual.codigo]||{};
+    const sit=calcularSituacionAcademica(usuarioActual.codigo,e.programa);
+    const pend=getEvaluacionPendiente()[usuarioActual.codigo];
+    if(pend?.pendiente) alertas.push({tipo:"warning",icon:"⚠️",titulo:"Evaluación docente pendiente",texto:"Debes completar la evaluación docente para continuar con tu matrícula académica.",accion:"mostrarPanel('evaluacion')"});
+    if(sit?.expulsado) alertas.push({tipo:"danger",icon:"⛔",titulo:"Estado académico: PFU",texto:"Tu situación académica requiere revisión por Coordinación.",accion:"mostrarPanel('avance')"});
+    else if(sit?.normalidad?.estado && sit.normalidad.estado!=="Normal") alertas.push({tipo:"warning",icon:"⚠️",titulo:sit.normalidad.estado,texto:"Revisa tu situación académica y las condiciones de matrícula.",accion:"mostrarPanel('avance')"});
+    if((sit?.pendientesAtrasadas?.length||0)>0) alertas.push({tipo:"info",icon:"📚",titulo:`${sit.pendientesAtrasadas.length} materia(s) pendiente(s)`,texto:"Hay asignaturas de niveles anteriores que todavía debes aprobar.",accion:"mostrarPanel('matricularMaterias')"});
+    if(alertas.length===0) alertas.push({tipo:"success",icon:"✓",titulo:"Todo en orden",texto:"No tienes alertas académicas prioritarias en este momento.",accion:"mostrarPanel('avance')"});
+  }else if(rol==="docente"){
+    const gruposTodo=getGrupos(), actas=getActas(), grupos=[];
+    programasDelDocente().forEach(programa=>{
+      const gp=gruposTodo[programa]||{};
+      Object.keys(gp).forEach(materia=>(gp[materia]||[]).filter(g=>g.docente===usuarioActual.nombre).forEach(g=>grupos.push({programa,materia,g})));
+    });
+    const pendientes=grupos.filter(x=>!actas[x.g.id]);
+    if(pendientes.length) alertas.push({tipo:"warning",icon:"⏰",titulo:`${pendientes.length} acta(s) pendiente(s)`,texto:"Revisa los grupos que todavía no tienen acta publicada.",accion:"irDocente('notas')"});
+    if(!grupos.length) alertas.push({tipo:"info",icon:"ℹ️",titulo:"Sin grupos asignados",texto:"No hay grupos asociados a tu usuario en el periodo actual.",accion:"irDocente('horario')"});
+    if(!alertas.length) alertas.push({tipo:"success",icon:"✓",titulo:"Gestión al día",texto:"Tus grupos y actas no presentan pendientes prioritarios.",accion:"irDocente('notas')"});
+  }else if(rol==="admisiones"){
+    const estudiantes=Object.values(getEstudiantes());
+    const sinPrograma=estudiantes.filter(e=>!e.programa).length;
+    if(sinPrograma) alertas.push({tipo:"warning",icon:"⚠️",titulo:`${sinPrograma} estudiante(s) sin programa`,texto:"Revisa los registros antes de finalizar su gestión administrativa.",accion:"renderListaEstudiantes()"});
+    if(!alertas.length) alertas.push({tipo:"success",icon:"✓",titulo:"Registro administrativo estable",texto:"No se detectan alertas básicas en los registros de estudiantes.",accion:"renderListaEstudiantes()"});
+  }else if(rol==="director"){
+    const docentes=(getDocentes()[usuarioActual.programa]||[]).length;
+    const materias=Object.keys((getProgramas()[usuarioActual.programa]||{}).pensum||{}).length;
+    const slots=typeof materiasElectivaSlots==="function"?materiasElectivaSlots(usuarioActual.programa).length:0;
+    if(!docentes) alertas.push({tipo:"warning",icon:"👨‍🏫",titulo:"Sin docentes registrados",texto:"El programa todavía no tiene docentes asociados.",accion:"renderCrearDocente()"});
+    if(!materias) alertas.push({tipo:"warning",icon:"📚",titulo:"Plan de estudios vacío",texto:"Configura el pensum del programa para continuar.",accion:"crearPensum()"});
+    if(slots) alertas.push({tipo:"info",icon:"⭐",titulo:`${slots} cupo(s) electivo(s)`,texto:"Puedes revisar y actualizar el catálogo de materias electivas.",accion:"renderElectivas()"});
+    if(!alertas.length) alertas.push({tipo:"success",icon:"✓",titulo:"Programa en orden",texto:"El programa tiene pensum y docentes registrados.",accion:"verPensumAdmin()"});
+  }else if(rol==="coordinador"){
+    const mon=datosMonitoreoAcademico(), sync=contarPendientesSync();
+    const cond=(mon.counts["Condicional 1"]||0)+(mon.counts["Condicional 2"]||0)+(mon.counts["Condicional 3"]||0);
+    if(cond) alertas.push({tipo:"warning",icon:"⚠️",titulo:`${cond} estudiante(s) condicional(es)`,texto:"Hay estudiantes que requieren seguimiento académico.",accion:"renderMonitoreoAcademico()"});
+    if(mon.counts.PFU) alertas.push({tipo:"danger",icon:"⛔",titulo:`${mon.counts.PFU} estudiante(s) PFU`,texto:"Revisa estos casos desde el monitoreo académico.",accion:"renderMonitoreoAcademico()"});
+    if(sync) alertas.push({tipo:"warning",icon:"☁️",titulo:`${sync} cambio(s) pendiente(s)`,texto:"La sincronización con Supabase todavía tiene elementos por enviar.",accion:"renderEstadoSincronizacion()"});
+    if(!alertas.length) alertas.push({tipo:"success",icon:"✓",titulo:"Coordinación al día",texto:"No hay alertas académicas prioritarias ni cambios pendientes de sincronización.",accion:"renderMonitoreoAcademico()"});
+  }
+  return alertas.slice(0,4);
+}
+
+function actualizarBadgeNotificaciones(){
+  const badge=document.getElementById("uanNotifBadge");
+  if(!badge) return;
+  const alertas=construirAlertasDashboard();
+  const n=alertas.filter(a=>a.tipo==="warning"||a.tipo==="danger").length;
+  badge.textContent=String(n);
+  badge.classList.toggle("visible",n>0);
+}
+
+function mostrarNotificaciones(){
+  const alertas=construirAlertasDashboard();
+  const html=alertas.map(a=>`<button class="uan-notif-item ${a.tipo}" type="button" onclick="cerrarModal();setTimeout(()=>{${a.accion}},80)"><span class="uan-notif-icon">${a.icon}</span><span><b>${escAttr(a.titulo)}</b><small>${escAttr(a.texto)}</small></span><em>›</em></button>`).join("");
+  abrirModal(`<div class="uan-notif-modal"><span class="uan-modal-kicker">CENTRO DE NOTIFICACIONES</span><h2>Alertas y novedades</h2><p>Información prioritaria según tu rol institucional.</p><div class="uan-notif-list">${html}</div></div>`);
+}
+
+function mostrarMensajes(){
+  abrirModal(`<div class="uan-notif-modal"><span class="uan-modal-kicker">MENSAJERÍA INSTITUCIONAL</span><h2>Mensajes</h2><p class="uan-empty-state">La bandeja de mensajes está preparada para integrarse con comunicaciones institucionales. Por ahora no tienes mensajes nuevos.</p></div>`);
+}
+
+function renderDashboardInsight(rol){
+  const alertas=construirAlertasDashboard();
+  const html=alertas.map(a=>`<button class="uan-alert-row ${a.tipo}" type="button" onclick="${a.accion}"><span class="uan-alert-icon">${a.icon}</span><span class="uan-alert-copy"><b>${escAttr(a.titulo)}</b><small>${escAttr(a.texto)}</small></span><span class="uan-alert-arrow">›</span></button>`).join("");
+  let etiqueta="CENTRO DE ATENCIÓN", titulo="Lo importante de hoy";
+  if(rol==="estudiante"){etiqueta="TU VIDA ACADÉMICA";titulo="Revisa tu estado y próximos pasos";}
+  else if(rol==="docente"){etiqueta="GESTIÓN DOCENTE";titulo="Pendientes de tus grupos";}
+  else if(rol==="director"){etiqueta="GESTIÓN DEL PROGRAMA";titulo="Aspectos que requieren revisión";}
+  else if(rol==="coordinador"){etiqueta="CONTROL ACADÉMICO";titulo="Alertas del programa";}
+  else if(rol==="admisiones"){etiqueta="GESTIÓN ADMINISTRATIVA";titulo="Revisión de registros";}
+  return `<section class="uan-insight-card"><div class="uan-insight-head"><div><span>${etiqueta}</span><h3>${titulo}</h3></div><button type="button" onclick="mostrarNotificaciones()">Ver todo <b>→</b></button></div><div class="uan-alert-list">${html}</div></section>`;
 }
 
 /* ======================================================================
@@ -1613,17 +1715,22 @@ function renderHomeDashboard(){
     const totalGrupos = Object.values(gruposTodo).reduce((a,l)=>a+(l||[]).length,0);
     bienvenida = `¡Bienvenido, Coordinación de ${usuarioActual.programa || "Escuela"}!`;
     subtitulo = "Programa grupos, horarios y procesos de matrícula del programa académico.";
+    const mon=datosMonitoreoAcademico();
+    const pendientesSync=contarPendientesSync();
     stats = [
       {icon:"▦", label:"GRUPOS", value:totalGrupos, note:"Programados", tone:"blue"},
       {icon:"📚", label:"MATERIAS", value:Object.keys(gruposTodo).length, note:"Con grupos", tone:"green"},
-      {icon:"◷", label:"PERIODO", value:"2026-2", note:"Periodo actual", tone:"orange"},
-      {icon:"⌁", label:"ESTADO", value:"Activo", note:"Coordinación", tone:"purple"}
+      {icon:"⚠", label:"CONDICIONALES", value:(mon.counts["Condicional 1"]||0)+(mon.counts["Condicional 2"]||0)+(mon.counts["Condicional 3"]||0), note:"Requieren seguimiento", tone:"orange"},
+      {icon:"☁", label:"SINCRONIZACIÓN", value:pendientesSync?pendientesSync+" pend.":"OK", note:pendientesSync?"Cambios pendientes":"Todo al día", tone:"purple"}
     ];
     tiles = [
       {icono:"🗓️", label:"Programar Materia", desc:"Crea grupos y horarios", accion:"renderProgramarMateria()"},
       {icono:"👥", label:"Ver Grupos", desc:"Consulta los grupos programados", accion:"renderVerGrupos()"},
       {icono:"🔓", label:"Abrir / Cerrar Matrículas", desc:"Gestiona el periodo de matrícula", accion:"renderGestionMatriculas()"},
       {icono:"📝", label:"Notas y correcciones", desc:"Corrige notas como Coordinación", accion:"renderNotasCoordinador()"},
+      {icono:"📈", label:"Monitoreo académico", desc:"Condicionales, PFU y promedios", accion:"renderMonitoreoAcademico()"},
+      {icono:"🕵️", label:"Historial de cambios", desc:"Trazabilidad de notas", accion:"renderAuditoriaNotas()"},
+      {icono:"☁️", label:"Estado de sincronización", desc:"Revisa Supabase y pendientes", accion:"renderEstadoSincronizacion()"},
       {icono:"⏰", label:"Fecha límite de actas", desc:"Define día y hora para docentes", accion:"renderConfigActasCoordinador()"},
       {icono:"✏️", label:"Inclusiones", desc:"Gestiona cambios manuales", accion:"renderInclusiones()"}
     ];
@@ -1649,12 +1756,14 @@ function renderHomeDashboard(){
       <div><h2 class="panel-title">${bienvenida}</h2><p>${subtitulo}</p></div>
     </section>
     <section class="uan-stats-grid">${statsHtml}</section>
+    ${renderDashboardInsight(rol)}
     <div class="uan-section-label">ACCESOS RÁPIDOS</div>
     <section class="uan-quick-grid">${tilesHtml}</section>
     <footer class="uan-status-footer">
       <span><i></i>Sistema activo</span><span>⟳ Sincronización en tiempo real</span><span>⌕ Datos cifrados y protegidos</span><b>© 2026 Universidad Autónoma Nacional</b>
     </footer>
   `;
+  actualizarBadgeNotificaciones();
 }
 
 function toggleSidebarMobile(){
@@ -5651,6 +5760,17 @@ async function subirActas(programaNombre, grupoId, materia){
     try{
       const estudiantes = estudiantesDeGrupo(programaNombre, materia, grupoId);
       const actas = getActas();
+      const nuevaVersion = obtenerVersionActa(grupoId) + 1;
+      guardarActaMeta(grupoId,{
+        version:nuevaVersion,
+        estado:"OFICIAL",
+        cerradaAt:new Date().toISOString(),
+        cerradaPor:usuarioActual?.nombre||usuarioActual?.usuario||"Usuario",
+        programa:programaNombre,
+        materia:materia,
+        grupo:(buscarContextoGrupo(grupoId)?.g?.grupo)||""
+      });
+      registrarEventoActa(grupoId,"ACTA_CERRADA",{version:nuevaVersion});
       actas[grupoId] = true;
       localStorage.setItem("uan_actas", JSON.stringify(actas));
       agregarPendienteSync(SYNC_ACTAS_PENDIENTES, grupoId);
@@ -5697,8 +5817,11 @@ function reabrirActas(grupoId){
     abrirModal(`<div class="status-modal"><h2>Acta protegida</h2><p>El acta solo puede reabrirse por Coordinación o por el docente responsable mientras la fecha límite siga vigente.</p></div>`);
     return;
   }
-  pedirConfirmacion("¿Reabrir las actas de este grupo para corregir notas? El estudiante seguirá viendo la última nota oficial hasta que subas actas de nuevo.", async function(){
+  pedirConfirmacion("¿Reabrir las actas de este grupo para corregir notas? El estudiante seguirá viendo la última nota oficial hasta que subas actas de nuevo.", async function(){ 
     const actas = getActas();
+    const versionActual = obtenerVersionActa(grupoId);
+    guardarActaMeta(grupoId,{estado:"REABIERTA",reabiertaAt:new Date().toISOString(),reabiertaPor:usuarioActual?.nombre||usuarioActual?.usuario||"Usuario"});
+    registrarEventoActa(grupoId,"ACTA_REABIERTA",{version:versionActual});
     actas[grupoId] = false;
     localStorage.setItem("uan_actas", JSON.stringify(actas));
     agregarPendienteSync(SYNC_ACTAS_PENDIENTES, grupoId);
@@ -6681,6 +6804,7 @@ function renderPanelGrupoCentroNotas(programa,materia,g){
         </div>
 
         <div class="nc-actions">
+          ${acta ? `<span class="nc-version-chip">ACTA · V${obtenerVersionActa(g.id)||1}</span>` : `<span class="nc-version-chip draft">BORRADOR</span>`}
           <button type="button" class="nc-btn" onclick="volverGruposCentroNotas()">
             ← Cambiar grupo
           </button>
@@ -7076,6 +7200,8 @@ async function guardarNotaItem(grupoId, codigo, itemId, valor){
   const notas = getNotas();
   if(!notas[grupoId]) notas[grupoId]={};
   if(!notas[grupoId][codigo]) notas[grupoId][codigo]={};
+  const valorAnterior = notas[grupoId][codigo][itemId];
+  registrarAuditoriaNota(grupoId,codigo,itemId,valorAnterior,valor);
   notas[grupoId][codigo][itemId] = valor;
   // Si el docente vuelve a editar una nota, la última modificación deja de
   // aparecer como corrección de Coordinación.
@@ -7158,6 +7284,229 @@ function guardarPasswordPropiaDocente(){
   document.getElementById("pwd_actual").value="";
   document.getElementById("pwd_nueva").value="";
   document.getElementById("pwd_confirmar").value="";
+}
+
+
+/* ================================================================
+   V24 — CONTROL ACADÉMICO, AUDITORÍA Y SINCRONIZACIÓN
+   - Historial de cambios de notas
+   - Versionado de actas
+   - Monitoreo académico
+   - Centro de sincronización
+   - Alertas de normalidad
+   ================================================================ */
+const AUDITORIA_NOTAS_KEY = "uan_auditoria_notas";
+const ACTAS_META_KEY = "uan_actas_meta";
+const SYNC_STATUS_KEY = "uan_sync_status";
+
+function getAuditoriaNotas(){
+  try{return JSON.parse(localStorage.getItem(AUDITORIA_NOTAS_KEY)||"[]");}
+  catch(e){return [];}
+}
+function guardarAuditoriaNotas(arr){
+  localStorage.setItem(AUDITORIA_NOTAS_KEY,JSON.stringify(arr.slice(-500)));
+}
+function registrarAuditoriaNota(grupoId,codigo,itemId,anterior,nuevo){
+  if(String(anterior??"")===String(nuevo??"")) return;
+  const grupo=buscarContextoGrupo(grupoId);
+  const config=getConfigEvaluacion()[grupoId]||[];
+  const item=config.find(i=>String(i.id)===String(itemId));
+  const evento={
+    id:"AUD-"+Date.now()+"-"+Math.random().toString(36).slice(2,8),
+    fecha:new Date().toISOString(),
+    grupoId:String(grupoId),
+    codigo:String(codigo),
+    materia:grupo?.materia||"",
+    programa:grupo?.programa||usuarioActual?.programa||"",
+    grupo:grupo?.g?.grupo||"",
+    itemId:String(itemId),
+    itemNombre:item?.nombre||"Evaluación",
+    anterior:anterior===""||anterior===undefined?null:parseFloat(anterior),
+    nuevo:nuevo===""||nuevo===undefined?null:parseFloat(nuevo),
+    actor:usuarioActual?.nombre||usuarioActual?.usuario||"Usuario",
+    rol:usuarioActual?.rol||""
+  };
+  const arr=getAuditoriaNotas();
+  arr.push(evento);
+  guardarAuditoriaNotas(arr);
+  // Si existe la tabla opcional en Supabase, queda también centralizado.
+  if(supabaseClient){
+    supabaseClient.from("auditoria_notas").insert({
+      id:evento.id,fecha:evento.fecha,grupo_id:evento.grupoId,codigo:evento.codigo,
+      materia:evento.materia,programa:evento.programa,grupo:evento.grupo,
+      item_id:evento.itemId,item_nombre:evento.itemNombre,
+      anterior:evento.anterior,nuevo:evento.nuevo,actor:evento.actor,rol:evento.rol
+    }).then(({error})=>{ if(error) console.warn("Auditoría remota no disponible:",error.message); });
+  }
+}
+
+function getActasMeta(){
+  try{return JSON.parse(localStorage.getItem(ACTAS_META_KEY)||"{}");}
+  catch(e){return {};}
+}
+function guardarActaMeta(grupoId,extra={}){
+  const all=getActasMeta();
+  const prev=all[grupoId]||{version:0};
+  all[grupoId]={...prev,...extra};
+  localStorage.setItem(ACTAS_META_KEY,JSON.stringify(all));
+  return all[grupoId];
+}
+function obtenerVersionActa(grupoId){
+  return parseInt((getActasMeta()[grupoId]||{}).version||0,10);
+}
+
+function registrarEventoActa(grupoId,tipo,extra={}){
+  const ctx=buscarContextoGrupo(grupoId);
+  const all=getActasMeta();
+  const meta=all[grupoId]||{version:0};
+  const historial=Array.isArray(meta.historial)?meta.historial:[];
+  historial.push({
+    tipo,fecha:new Date().toISOString(),
+    actor:usuarioActual?.nombre||usuarioActual?.usuario||"Usuario",
+    rol:usuarioActual?.rol||"",
+    ...extra
+  });
+  guardarActaMeta(grupoId,{historial,programa:ctx?.programa||"",materia:ctx?.materia||"",grupo:ctx?.g?.grupo||""});
+}
+
+function getSyncStatus(){
+  try{return JSON.parse(localStorage.getItem(SYNC_STATUS_KEY)||"{}");}
+  catch(e){return {};}
+}
+function marcarSyncExitosa(){
+  localStorage.setItem(SYNC_STATUS_KEY,JSON.stringify({
+    ultima:new Date().toISOString(),
+    pendientesNotas:getPendientesSync(SYNC_NOTAS_PENDIENTES).length,
+    pendientesActas:getPendientesSync(SYNC_ACTAS_PENDIENTES).length,
+    pendientesHistorial:getPendientesSync(SYNC_HISTORIAL_PENDIENTES).length,
+    pendientesConfig:localStorage.getItem(SYNC_CONFIG_PENDIENTES)==="1"?1:0
+  }));
+}
+function contarPendientesSync(){
+  return getPendientesSync(SYNC_NOTAS_PENDIENTES).length+
+         getPendientesSync(SYNC_ACTAS_PENDIENTES).length+
+         getPendientesSync(SYNC_HISTORIAL_PENDIENTES).length+
+         (localStorage.getItem(SYNC_CONFIG_PENDIENTES)==="1"?1:0);
+}
+function formatearFechaHoraCorta(iso){
+  if(!iso) return "Sin sincronización registrada";
+  try{return new Intl.DateTimeFormat("es-CO",{dateStyle:"short",timeStyle:"medium"}).format(new Date(iso));}
+  catch(e){return iso;}
+}
+
+function clasificarNormalidad(n){
+  const estado=n?.estado||"Normal";
+  if(estado==="PFU") return {clave:"PFU",label:"PFU",icon:"⚫",clase:"pff"};
+  const c=Math.min(3,parseInt(n?.semestresCondicional||0,10));
+  if(c===0) return {clave:"Normal",label:"Normal",icon:"🟢",clase:"normal"};
+  return {clave:"Condicional "+c,label:"Condicional "+c,icon:c===1?"🟡":c===2?"🟠":"🔴",clase:"cond"+c};
+}
+
+function datosMonitoreoAcademico(){
+  const estudiantes=Object.values(getEstudiantes()).filter(e=>e && (!usuarioActual?.programa || e.programa===usuarioActual.programa));
+  const normalidad=getNormalidadEstudiantes();
+  const hist=getHistorial();
+  const filas=estudiantes.map(e=>{
+    const h=hist[e.codigo]||{};
+    const notas=Object.values(h).filter(x=>x && typeof x.definitiva==="number" && typeof x.creditos==="number");
+    const cr=notas.reduce((a,x)=>a+(Number(x.creditos)||0),0);
+    const prom=cr?notas.reduce((a,x)=>a+(Number(x.definitiva)||0)*(Number(x.creditos)||0),0)/cr:null;
+    return {...e,promedio:prom,normalidad:normalidad[e.codigo]||{estado:"Normal",semestresCondicional:0}};
+  });
+  const counts={Normal:0,"Condicional 1":0,"Condicional 2":0,"Condicional 3":0,PFU:0};
+  filas.forEach(x=>counts[clasificarNormalidad(x.normalidad).label]=(counts[clasificarNormalidad(x.normalidad).label]||0)+1);
+  const conProm=filas.filter(x=>x.promedio!==null);
+  const promedioGeneral=conProm.length?conProm.reduce((a,x)=>a+x.promedio,0)/conProm.length:null;
+  return {filas,counts,promedioGeneral};
+}
+
+function renderMonitoreoAcademico(){
+  if(usuarioActual?.rol!=="coordinador"){
+    abrirModal(`<div class="status-modal"><h2>Acceso restringido</h2><p>El monitoreo académico está disponible para Coordinación Académica.</p></div>`);
+    return;
+  }
+  const d=datosMonitoreoAcademico();
+  const cards=[
+    ["🟢","NORMAL",d.counts.Normal||0,"normal"],
+    ["🟡","CONDICIONAL 1",d.counts["Condicional 1"]||0,"cond1"],
+    ["🟠","CONDICIONAL 2",d.counts["Condicional 2"]||0,"cond2"],
+    ["🔴","CONDICIONAL 3",d.counts["Condicional 3"]||0,"cond3"],
+    ["⚫","PFU",d.counts.PFU||0,"pff"]
+  ].map(c=>`<div class="am-card ${c[3]}"><span>${c[0]}</span><b>${c[2]}</b><small>${c[1]}</small></div>`).join("");
+  const alertas=d.filas.filter(x=>x.normalidad?.estado==="Condicional"||x.normalidad?.estado==="PFU")
+    .sort((a,b)=>((b.normalidad?.semestresCondicional||0)-(a.normalidad?.semestresCondicional||0))||(a.nombre||"").localeCompare(b.nombre||""));
+  const rows=d.filas.sort((a,b)=>(b.promedio??-1)-(a.promedio??-1)).map(e=>{
+    const n=clasificarNormalidad(e.normalidad);
+    return `<tr><td class="am-name">${escAttr(e.nombre||"-")}<small>${escAttr(e.codigo||"")}</small></td>
+      <td>${e.promedio===null?"—":e.promedio.toFixed(2)}</td>
+      <td><span class="am-badge ${n.clase}">${n.icon} ${n.label}</span></td>
+      <td>${e.normalidad?.semestresCondicional||0}</td></tr>`;
+  }).join("");
+  const alertRows=alertas.map(e=>{
+    const n=clasificarNormalidad(e.normalidad);
+    const texto=n.clave==="PFU"?"Riesgo de PFU":`Seguimiento ${n.label}`;
+    return `<div class="am-alert-row ${n.clase}"><div><b>${escAttr(e.nombre||"-")}</b><small>${escAttr(e.codigo||"")} · ${texto}</small></div>
+      <strong>${e.promedio===null?"—":e.promedio.toFixed(2)}</strong></div>`;
+  }).join("") || `<div class="am-empty">No hay estudiantes en condición académica.</div>`;
+
+  document.getElementById("contenido").innerHTML=`
+    <div class="am-shell">
+      <div class="am-hero"><div><span>COORDINACIÓN ACADÉMICA · MONITOREO</span><h1>Rendimiento académico</h1>
+      <p>Vista consolidada del programa ${escAttr(usuarioActual.programa||"")} y sus alertas de normalidad.</p></div>
+      <div class="am-hero-kpi"><small>Promedio general</small><b>${d.promedioGeneral===null?"—":d.promedioGeneral.toFixed(2)}</b><span>${d.filas.length} estudiantes</span></div></div>
+      <div class="am-cards">${cards}</div>
+      <div class="am-grid">
+        <section class="am-panel"><div class="am-panel-head"><div><span>ALERTAS</span><h2>Seguimiento requerido</h2></div><b>${alertas.length}</b></div>${alertRows}</section>
+        <section class="am-panel"><div class="am-panel-head"><div><span>DETALLE</span><h2>Estudiantes</h2></div><input class="am-search" id="amSearch" placeholder="Buscar nombre o código"></div>
+          <div class="am-table-wrap"><table class="am-table"><thead><tr><th>Estudiante</th><th>Promedio</th><th>Estado</th><th>Cond.</th></tr></thead><tbody id="amTbody">${rows}</tbody></table></div>
+        </section>
+      </div>
+    </div>`;
+  document.getElementById("amSearch")?.addEventListener("input",e=>{
+    const q=e.target.value.toLowerCase().trim();
+    document.querySelectorAll("#amTbody tr").forEach(tr=>tr.style.display=tr.textContent.toLowerCase().includes(q)?"":"none");
+  });
+}
+
+function renderAuditoriaNotas(){
+  if(usuarioActual?.rol!=="coordinador"){
+    abrirModal(`<div class="status-modal"><h2>Acceso restringido</h2><p>El historial de cambios está disponible para Coordinación Académica.</p></div>`);
+    return;
+  }
+  const arr=getAuditoriaNotas().slice().reverse();
+  document.getElementById("contenido").innerHTML=`
+    <div class="audit-shell"><div class="audit-hero"><span>CONTROL ACADÉMICO · TRAZABILIDAD</span><h1>Historial de cambios de notas</h1><p>Cada corrección conserva quién cambió la nota, cuándo y cuál era el valor anterior.</p></div>
+    <div class="audit-toolbar"><input id="auditSearch" placeholder="🔎 Buscar estudiante, código, materia o docente"><button class="audit-clear" onclick="limpiarFiltroAuditoria()">Limpiar</button></div>
+    <div class="audit-table-wrap"><table class="audit-table"><thead><tr><th>Fecha</th><th>Estudiante</th><th>Materia / evaluación</th><th>Antes</th><th>Después</th><th>Actor</th></tr></thead><tbody id="auditTbody">
+    ${arr.map(a=>`<tr><td>${formatearFechaHoraCorta(a.fecha)}</td><td><b>${escAttr(a.codigo)}</b></td><td><b>${escAttr(a.materia||"-")}</b><small>${escAttr(a.itemNombre||"-")} · Grupo ${escAttr(a.grupo||"-")}</small></td><td>${a.anterior===null?"—":Number(a.anterior).toFixed(1)}</td><td><strong>${a.nuevo===null?"—":Number(a.nuevo).toFixed(1)}</strong></td><td>${escAttr(a.actor||"-")}<small>${escAttr(a.rol||"")}</small></td></tr>`).join("")||`<tr><td colspan="6" class="audit-empty">Aún no hay cambios registrados.</td></tr>`}
+    </tbody></table></div>
+    <div class="audit-note">Se conservan hasta 500 movimientos en el dispositivo. Si activas la tabla opcional de Supabase incluida en esta versión, también quedarán centralizados.</div></div>`;
+  document.getElementById("auditSearch")?.addEventListener("input",e=>{
+    const q=e.target.value.toLowerCase().trim();
+    document.querySelectorAll("#auditTbody tr").forEach(tr=>tr.style.display=tr.textContent.toLowerCase().includes(q)?"":"none");
+  });
+}
+function limpiarFiltroAuditoria(){const e=document.getElementById("auditSearch");if(e){e.value="";e.dispatchEvent(new Event("input"));}}
+
+function renderEstadoSincronizacion(){
+  const s=getSyncStatus(), pendientes=contarPendientesSync();
+  const ultima=s.ultima;
+  const items=[
+    ["Usuarios","✓","Sincronización general"],
+    ["Programas y pensum","✓","Datos académicos"],
+    ["Grupos y horarios","✓","Programación"],
+    ["Notas","✓",`${getPendientesSync(SYNC_NOTAS_PENDIENTES).length} pendiente(s)`],
+    ["Actas","✓",`${getPendientesSync(SYNC_ACTAS_PENDIENTES).length} pendiente(s)`],
+    ["Historial","✓",`${getPendientesSync(SYNC_HISTORIAL_PENDIENTES).length} pendiente(s)`],
+    ["Configuración de evaluación","✓",`${getPendientesSync(SYNC_CONFIG_PENDIENTES).length} pendiente(s)`]
+  ];
+  document.getElementById("contenido").innerHTML=`
+    <div class="sync-shell"><div class="sync-hero"><span>INFRAESTRUCTURA · SUPABASE</span><h1>Centro de sincronización</h1><p>Estado de la comunicación entre la plataforma y la base institucional.</p>
+      <div class="sync-big ${pendientes?"warn":"ok"}"><b>${pendientes?"⚠":"✓"}</b><div><strong>${pendientes?"Hay cambios pendientes":"Todo sincronizado"}</strong><small>Última sincronización: ${formatearFechaHoraCorta(ultima)}</small></div></div>
+    </div>
+    <div class="sync-grid">${items.map(x=>`<div class="sync-card"><span class="sync-dot">●</span><div><b>${x[0]}</b><small>${x[2]}</small></div><strong>${x[1]}</strong></div>`).join("")}</div>
+    <button class="nc-btn primary" onclick="sincronizarTodoSilencioso().then(()=>{marcarSyncExitosa();renderEstadoSincronizacion();})">↻ Sincronizar ahora</button>
+    </div>`;
 }
 
 /* ================================================================
