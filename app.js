@@ -997,14 +997,27 @@ function inicializarDatos(){
   }
   migrarElectivasAntiguas();
 }
-Promise.all([
-  sincronizarUsuariosDesdeSupabase(),
-  sincronizarProgramasDesdeSupabase(),
-  sincronizarGruposDesdeSupabase(),
-  sincronizarMatriculasNotasDesdeSupabase(),
-  sincronizarActasEvaluacionHistorialDesdeSupabase(),
-  sincronizarAsistenciaDesdeSupabase()
-]).finally(()=>{ datosListos = true; inicializarDatos(); });
+/* Si alguna de las sincronizaciones se queda "colgada" (problema de red o
+   de Supabase que no llega a arrojar error), esto evita que datosListos se
+   quede en false para siempre y bloquee los botones de inicio de sesión.
+   Después de este tiempo la app sigue con lo último que haya en localStorage. */
+function conTimeoutMaximo(promesa, ms){
+  return Promise.race([
+    promesa,
+    new Promise(resolve=>setTimeout(resolve, ms))
+  ]);
+}
+conTimeoutMaximo(
+  Promise.all([
+    sincronizarUsuariosDesdeSupabase(),
+    sincronizarProgramasDesdeSupabase(),
+    sincronizarGruposDesdeSupabase(),
+    sincronizarMatriculasNotasDesdeSupabase(),
+    sincronizarActasEvaluacionHistorialDesdeSupabase(),
+    sincronizarAsistenciaDesdeSupabase()
+  ]),
+  6000
+).finally(()=>{ datosListos = true; inicializarDatos(); });
 
 /* Versiones anteriores guardaban las electivas como {nombreMateria: creditos}.
    Ahora son {nombreDeCupo: [{nombre, prerequisitos}, ...]}. Si queda algún dato
@@ -1235,18 +1248,26 @@ window.addEventListener("online", async ()=>{
   }catch(err){ console.warn("Reintento de sincronización al volver la conexión:",err); }
 });
 
+function mostrarAvisoCargandoInicio(){
+  let aviso = document.getElementById("avisoCargando");
+  if(!aviso){
+    aviso = document.createElement("div");
+    aviso.id = "avisoCargando";
+    aviso.style.cssText = "position:fixed;top:16px;left:50%;transform:translateX(-50%);"
+      + "z-index:99999;background:#1e5631;color:#eaf7ea;border:1px solid #27ae60;"
+      + "padding:10px 18px;border-radius:8px;font:600 13px system-ui,Arial,sans-serif;"
+      + "box-shadow:0 8px 24px rgba(0,0,0,.35);max-width:90vw;text-align:center;";
+    document.body.appendChild(aviso);
+  }
+  aviso.textContent = "Un momento, todavía se están cargando los datos. Intenta de nuevo en un segundo.";
+  aviso.style.display = "block";
+  clearTimeout(aviso._ocultarTimer);
+  aviso._ocultarTimer = setTimeout(()=>{ aviso.style.display = "none"; }, 3000);
+}
+
 function mostrarLogin(r){
   if(!datosListos){
-    const inicio = document.getElementById("inicio");
-    let aviso = document.getElementById("avisoCargando");
-    if(!aviso){
-      aviso = document.createElement("div");
-      aviso.id = "avisoCargando";
-      aviso.className = "aviso";
-      aviso.style.marginTop = "15px";
-      inicio.appendChild(aviso);
-    }
-    aviso.textContent = "Un momento, todavía se están cargando los datos. Intenta de nuevo en un segundo.";
+    mostrarAvisoCargandoInicio();
     return;
   }
   usuarioActual = {rolCard:r};
