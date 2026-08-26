@@ -997,27 +997,14 @@ function inicializarDatos(){
   }
   migrarElectivasAntiguas();
 }
-/* Si alguna de las sincronizaciones se queda "colgada" (problema de red o
-   de Supabase que no llega a arrojar error), esto evita que datosListos se
-   quede en false para siempre y bloquee los botones de inicio de sesión.
-   Después de este tiempo la app sigue con lo último que haya en localStorage. */
-function conTimeoutMaximo(promesa, ms){
-  return Promise.race([
-    promesa,
-    new Promise(resolve=>setTimeout(resolve, ms))
-  ]);
-}
-conTimeoutMaximo(
-  Promise.all([
-    sincronizarUsuariosDesdeSupabase(),
-    sincronizarProgramasDesdeSupabase(),
-    sincronizarGruposDesdeSupabase(),
-    sincronizarMatriculasNotasDesdeSupabase(),
-    sincronizarActasEvaluacionHistorialDesdeSupabase(),
-    sincronizarAsistenciaDesdeSupabase()
-  ]),
-  6000
-).finally(()=>{ datosListos = true; inicializarDatos(); });
+Promise.all([
+  sincronizarUsuariosDesdeSupabase(),
+  sincronizarProgramasDesdeSupabase(),
+  sincronizarGruposDesdeSupabase(),
+  sincronizarMatriculasNotasDesdeSupabase(),
+  sincronizarActasEvaluacionHistorialDesdeSupabase(),
+  sincronizarAsistenciaDesdeSupabase()
+]).finally(()=>{ datosListos = true; inicializarDatos(); });
 
 /* Versiones anteriores guardaban las electivas como {nombreMateria: creditos}.
    Ahora son {nombreDeCupo: [{nombre, prerequisitos}, ...]}. Si queda algún dato
@@ -1113,38 +1100,25 @@ function actualizarFechaHora(){
 
   const opcionesHora = {
     timeZone:"America/Bogota",
-    hour:"2-digit",
-    minute:"2-digit",
-    second:"2-digit",
+    hour:"2-digit", minute:"2-digit", second:"2-digit",
     hour12:false
   };
-
   const opcionesFecha = {
     timeZone:"America/Bogota",
-    day:"2-digit",
-    month:"long",
-    year:"numeric"
+    day:"2-digit", month:"long", year:"numeric"
   };
 
-  if(horaEl){
-    horaEl.textContent =
-      new Intl.DateTimeFormat("es-CO", opcionesHora).format(ahora);
-  }
-
+  if(horaEl) horaEl.textContent = new Intl.DateTimeFormat("es-CO", opcionesHora).format(ahora);
   if(fechaEl){
-    const partes =
-      new Intl.DateTimeFormat("es-CO", opcionesFecha).formatToParts(ahora);
-
+    const partes = new Intl.DateTimeFormat("es-CO", opcionesFecha).formatToParts(ahora);
     const dia = partes.find(x=>x.type==="day")?.value || "";
     const mes = (partes.find(x=>x.type==="month")?.value || "").toUpperCase();
     const anio = partes.find(x=>x.type==="year")?.value || "";
-
     fechaEl.textContent = `${dia} DE ${mes} DE ${anio}`;
   }
 }
-
-actualizarFechaHora();
 setInterval(actualizarFechaHora,1000);
+actualizarFechaHora();
 
 
 /* ======================================================================
@@ -1208,36 +1182,16 @@ function registrarActividadUAN(){
   document.addEventListener(ev,registrarActividadUAN,{passive:true});
 });
 setInterval(()=>{
-  if(!usuarioActual || typeof usuarioActual !== "object") return;
-
-  const ultima = parseInt(
-    localStorage.getItem(UAN_SECURITY.STORAGE_ACTIVIDAD) || Date.now(),
-    10
-  );
-
-  if(Date.now() - ultima > UAN_SECURITY.SESION_INACTIVA_MS){
-
-    const rol = usuarioActual && typeof usuarioActual === "object"
-      ? String(usuarioActual.rol || usuarioActual.rolCard || "")
-      : "";
-
-    usuarioActual = null;
+  if(!usuarioActual) return;
+  const ultima=parseInt(localStorage.getItem(UAN_SECURITY.STORAGE_ACTIVIDAD)||Date.now(),10);
+  if(Date.now()-ultima > UAN_SECURITY.SESION_INACTIVA_MS){
+    const rol=usuarioActual?.rol||"";
+    usuarioActual=null;
     localStorage.removeItem(UAN_SECURITY.STORAGE_ACTIVIDAD);
-
-    document.body.classList.remove("uan-dashboard-active");
-
-    const dashboard = document.getElementById("dashboard");
-    const login = document.getElementById("login");
-    const inicio = document.getElementById("inicio");
-
-    if(dashboard) dashboard.style.display = "none";
-    if(login) login.style.display = "none";
-    if(inicio) inicio.style.display = "flex";
-
-    const error = document.getElementById("loginError");
-    if(error) error.textContent = "Sesión cerrada por inactividad.";
-
-    console.info("Sesión UAN cerrada por inactividad:", rol);
+    if(typeof volverInicio==="function") volverInicio();
+    const error=document.getElementById("loginError");
+    if(error) error.textContent="Sesión cerrada por inactividad.";
+    console.info("Sesión UAN cerrada por inactividad:",rol);
   }
 },60000);
 
@@ -1268,57 +1222,31 @@ window.addEventListener("online", async ()=>{
   }catch(err){ console.warn("Reintento de sincronización al volver la conexión:",err); }
 });
 
-function mostrarAvisoCargandoInicio(){
-  let aviso = document.getElementById("avisoCargando");
-  if(!aviso){
-    aviso = document.createElement("div");
-    aviso.id = "avisoCargando";
-    aviso.style.cssText = "position:fixed;top:16px;left:50%;transform:translateX(-50%);"
-      + "z-index:99999;background:#1e5631;color:#eaf7ea;border:1px solid #27ae60;"
-      + "padding:10px 18px;border-radius:8px;font:600 13px system-ui,Arial,sans-serif;"
-      + "box-shadow:0 8px 24px rgba(0,0,0,.35);max-width:90vw;text-align:center;";
-    document.body.appendChild(aviso);
-  }
-  aviso.textContent = "Un momento, todavía se están cargando los datos. Intenta de nuevo en un segundo.";
-  aviso.style.display = "block";
-  clearTimeout(aviso._ocultarTimer);
-  aviso._ocultarTimer = setTimeout(()=>{ aviso.style.display = "none"; }, 3000);
-}
-
 function mostrarLogin(r){
-  const rolesPermitidos = ["admin","doc","est"];
-  const rol = String(r || "").toLowerCase();
-
-  if(!rolesPermitidos.includes(rol)){
-    console.warn("Rol de acceso no válido:", r);
-    return false;
+  document.body.classList.remove("uan-dashboard-active");
+  document.body.classList.add("uan-login-active");
+  if(!datosListos){
+    const inicio = document.getElementById("inicio");
+    let aviso = document.getElementById("avisoCargando");
+    if(!aviso){
+      aviso = document.createElement("div");
+      aviso.id = "avisoCargando";
+      aviso.className = "aviso";
+      aviso.style.marginTop = "15px";
+      inicio.appendChild(aviso);
+    }
+    aviso.textContent = "Un momento, todavía se están cargando los datos. Intenta de nuevo en un segundo.";
+    return;
   }
-
-  usuarioActual = {rolCard: rol};
-
-  const inicio = document.getElementById("inicio");
-  const loginBox = document.getElementById("login");
-  const errorEl = document.getElementById("loginError");
-
-  if(!inicio || !loginBox){
-    console.error("UAN: faltan #inicio o #login en index.html.");
-    return false;
-  }
-
-  inicio.style.display = "none";
-  loginBox.style.display = "flex";
-
-  if(errorEl) errorEl.textContent = "";
-
-  const user = document.getElementById("user");
-  const pass = document.getElementById("pass");
-  if(user) user.focus();
-
-  return false;
+  usuarioActual = {rolCard:r};
+  document.getElementById("inicio").style.display="none";
+  document.getElementById("login").style.display="flex";
+  document.getElementById("loginError").textContent = "";
 }
 
 function volverInicio(){
   usuarioActual=null;
+  document.body.classList.remove("uan-dashboard-active","uan-login-active");
   localStorage.removeItem(UAN_SECURITY.STORAGE_ACTIVIDAD);
   document.body.classList.remove("uan-dashboard-active");
   document.getElementById("login").style.display="none";
@@ -1388,6 +1316,7 @@ function login(){
 
 function entrar(){
   localStorage.setItem(UAN_SECURITY.STORAGE_ACTIVIDAD,String(Date.now()));
+  document.body.classList.remove("uan-login-active");
   document.getElementById("login").style.display="none";
   document.getElementById("inicio").style.display="none";
   document.body.classList.add("uan-dashboard-active");
@@ -1399,7 +1328,7 @@ function entrar(){
 
 function logout(){
   usuarioActual = null;
-  document.body.classList.remove("uan-dashboard-active");
+  document.body.classList.remove("uan-dashboard-active","uan-login-active");
   document.getElementById("dashboard").style.display="none";
   document.getElementById("login").style.display="none";
   document.getElementById("inicio").style.display="flex";
@@ -1560,25 +1489,16 @@ async function sincronizarTodoSilencioso(){
 }
 setInterval(async ()=>{
   if(!usuarioActual || !datosListos) return;
-
-  try{
-    await sincronizarTodoSilencioso();
-
-    /* IMPORTANTE: durante el await el usuario pudo cerrar el login.
-       Nunca leer usuarioActual.rol sin volver a comprobarlo. */
-    if(!usuarioActual || !datosListos) return;
-
-    if(usuarioActual.rol === 'estudiante' &&
-       VISTAS_ESTUDIANTE_AUTOREFRESH.includes(vistaEstudianteActual)){
-      mostrarPanel(vistaEstudianteActual);
-    } else if(usuarioActual.rol === 'docente' &&
-              VISTAS_DOCENTE_AUTOREFRESH.includes(vistaDocenteActual)){
-      irDocente(vistaDocenteActual);
-    }
-  }catch(err){
-    console.warn("Sincronización periódica UAN:", err);
+  await sincronizarTodoSilencioso();
+  if(usuarioActual.rol === 'estudiante' && VISTAS_ESTUDIANTE_AUTOREFRESH.includes(vistaEstudianteActual)){
+    mostrarPanel(vistaEstudianteActual);
+  } else if(usuarioActual.rol === 'docente' && VISTAS_DOCENTE_AUTOREFRESH.includes(vistaDocenteActual)){
+    irDocente(vistaDocenteActual);
   }
-},15000);
+  // Admisiones/Director/Coordinador no se refrescan solos (suelen tener
+  // formularios abiertos), pero sus datos en segundo plano sí quedan al día.
+}, 15000);
+
 document.addEventListener('DOMContentLoaded', function(){
   const barra = document.querySelector(".sidebar");
   if(!barra) return;
@@ -1656,6 +1576,7 @@ function renderSidebar(){
       <div class="menu-item" onclick="renderHomeDashboard()">🏠 Inicio <span>›</span></div>
       <div class="menu-item" onclick="renderMatricular()">Matricular Estudiante <span>›</span></div>
       <div class="menu-item" onclick="renderListaEstudiantes()">Lista de Estudiantes <span>›</span></div>
+      <div class="menu-item" onclick="renderGestionAccesosAdmin()">🔐 Gestión de Usuarios y Accesos <span>›</span></div>
       <div class="menu-item" onclick="renderCrearCuentaAdmin()">Crear Director / Coordinador <span>›</span></div>
       <div class="menu-item" onclick="renderListaCuentasAdmin()">Ver Directores / Coordinadores <span>›</span></div>
       <div class="menu-item" onclick="renderZonaPeligro()" style="color:#ffb3b3">⚠️ Zona de Peligro <span>›</span></div>
@@ -1898,6 +1819,7 @@ function renderHomeDashboard(){
     tiles = [
       {icono:"📝", label:"Matricular Estudiante", desc:"Registrar nuevos estudiantes", accion:"renderMatricular()"},
       {icono:"👥", label:"Lista de Estudiantes", desc:"Ver y gestionar estudiantes", accion:"renderListaEstudiantes()"},
+      {icono:"🔐", label:"Gestión de Usuarios y Accesos", desc:"Cambiar usuarios, códigos y contraseñas", accion:"renderGestionAccesosAdmin()"},
       {icono:"🏛️", label:"Crear Director / Coordinador", desc:"Registrar responsables académicos", accion:"renderCrearCuentaAdmin()"},
       {icono:"📋", label:"Ver Directores / Coordinadores", desc:"Consultar responsables", accion:"renderListaCuentasAdmin()"},
       {icono:"⚠️", label:"Zona de Peligro", desc:"Funciones críticas del sistema", accion:"renderZonaPeligro()", danger:true}
@@ -2489,6 +2411,338 @@ function eliminarCuentaAdmin(idx){
     saveCuentasAdmin(cuentas);
     renderListaCuentasAdmin();
   });
+}
+
+
+/* ======================================================================
+   V41 — GESTIÓN CENTRAL DE USUARIOS Y ACCESOS
+   Solo el rol Administrativo/Admisiones puede usar este módulo.
+   Permite cambiar usuario/código y restablecer contraseña de:
+   - Administrativos, Directores y Coordinadores
+   - Docentes
+   - Estudiantes
+   En estudiantes, el cambio de código migra también las referencias
+   académicas que utilizan el código como llave.
+   ====================================================================== */
+function adminPuedeGestionarAccesos(){
+  return !!usuarioActual && usuarioActual.rol === "admisiones";
+}
+
+function textoRolAcceso(c){
+  if(c.tipo === "estudiante") return "Estudiante";
+  if(c.tipo === "docente") return "Docente";
+  if(c.rol === "director") return "Director de Escuela";
+  if(c.rol === "coordinador") return "Coordinador Académico";
+  if(c.rol === "admisiones") return "Administrativo / Admisiones";
+  return c.rol || "Usuario";
+}
+
+function recopilarCuentasAccesoAdmin(){
+  const salida=[];
+
+  getCuentasAdmin().forEach((c,idx)=>{
+    salida.push({
+      tipo:"cuenta_admin",
+      idx,
+      usuario:c.usuario || "",
+      password:c.password || "",
+      rol:c.rol || "",
+      programa:c.programa || "",
+      nombre:c.rol === "admisiones" ? "Oficina de Admisiones" : (c.usuario || "Cuenta administrativa")
+    });
+  });
+
+  Object.keys(getDocentes()).forEach(programa=>{
+    (getDocentes()[programa] || []).forEach(d=>{
+      salida.push({
+        tipo:"docente",
+        id:d.id,
+        usuario:d.usuario || "",
+        password:d.password || "",
+        rol:"docente",
+        programa,
+        nombre:d.nombre || d.usuario || "Docente"
+      });
+    });
+  });
+
+  Object.keys(getEstudiantes()).forEach(codigo=>{
+    const e=getEstudiantes()[codigo];
+    salida.push({
+      tipo:"estudiante",
+      codigo,
+      usuario:e.codigo || codigo,
+      password:e.password || "",
+      rol:"estudiante",
+      programa:e.programa || "",
+      nombre:e.nombre || codigo
+    });
+  });
+
+  return salida;
+}
+
+function renderGestionAccesosAdmin(mensaje=""){
+  if(!adminPuedeGestionarAccesos()){
+    document.getElementById("contenido").innerHTML=`
+      <h2 class="panel-title">Acceso restringido</h2>
+      <div class="aviso aviso-error">Solo un usuario Administrativo puede gestionar credenciales de terceros.</div>`;
+    return;
+  }
+
+  const filtro=(document.getElementById("ga_buscar")?.value || "").trim().toLowerCase();
+  const cuentas=recopilarCuentasAccesoAdmin().filter(c=>{
+    if(!filtro) return true;
+    return [c.nombre,c.usuario,c.programa,textoRolAcceso(c)].join(" ").toLowerCase().includes(filtro);
+  });
+
+  let filas=cuentas.map(c=>{
+    const ref=c.tipo === "cuenta_admin" ? `cuenta:${c.idx}` : c.tipo === "docente" ? `docente:${c.id}` : `estudiante:${c.codigo}`;
+    return `<tr>
+      <td><span class="ga-tipo ga-${c.tipo}">${textoRolAcceso(c)}</span></td>
+      <td><b>${escAttr(c.nombre)}</b></td>
+      <td>${escAttr(c.usuario)}</td>
+      <td>${escAttr(c.programa || "—")}</td>
+      <td class="acciones">
+        <button class="btn-secundario" onclick="editarAccesoAdmin('${escAttr(ref)}')">Editar acceso</button>
+      </td>
+    </tr>`;
+  }).join("");
+
+  if(!filas) filas=`<tr><td colspan="5">No se encontraron usuarios con ese criterio.</td></tr>`;
+
+  document.getElementById("contenido").innerHTML=`
+    <h2 class="panel-title">Gestión de Usuarios y Accesos</h2>
+    ${mensaje ? `<div class="aviso">${mensaje}</div>` : ""}
+    <div class="ga-intro">
+      <div><b>Administración de credenciales</b><span>Cambia usuario/código o restablece la contraseña cuando un usuario la pierda.</span></div>
+      <div class="ga-count">${cuentas.length} acceso(s)</div>
+    </div>
+    <div class="ga-toolbar">
+      <input id="ga_buscar" placeholder="Buscar por nombre, usuario, código o programa" value="${escAttr(filtro)}" oninput="renderGestionAccesosAdmin()">
+      <button class="btn-secundario" onclick="renderGestionAccesosAdmin()">Actualizar</button>
+    </div>
+    <div class="ga-table-wrap">
+      <table class="ga-table">
+        <tr><th>Rol</th><th>Nombre</th><th>Usuario / Código</th><th>Programa</th><th>Acciones</th></tr>
+        ${filas}
+      </table>
+    </div>
+  `;
+}
+
+function editarAccesoAdmin(ref){
+  if(!adminPuedeGestionarAccesos()) return;
+  const [tipo,valor]=String(ref||"").split(":");
+
+  if(tipo === "cuenta"){
+    const idx=parseInt(valor,10);
+    const cuentas=getCuentasAdmin();
+    const c=cuentas[idx];
+    if(!c) return renderGestionAccesosAdmin("La cuenta ya no existe.");
+    document.getElementById("contenido").innerHTML=`
+      <h2 class="panel-title">Editar acceso administrativo</h2>
+      <div class="ga-persona"><b>${escAttr(textoRolAcceso(c))}</b><span>${escAttr(c.programa || "Oficina de Admisiones")}</span></div>
+      <div id="ga_aviso"></div>
+      <div class="form-grid">
+        <div><label>Usuario</label><input id="ga_usuario" value="${escAttr(c.usuario)}" autocomplete="off"></div>
+        <div><label>Nueva contraseña</label><input id="ga_password" type="password" placeholder="Escribe una nueva solo si deseas cambiarla"></div>
+        <div><label>Confirmar contraseña</label><input id="ga_password2" type="password"></div>
+        <div class="full"><button onclick="guardarAccesoCuentaAdmin(${idx})">Guardar cambios</button><button class="btn-secundario" onclick="renderGestionAccesosAdmin()">Cancelar</button></div>
+      </div>`;
+    return;
+  }
+
+  if(tipo === "docente"){
+    const id=valor;
+    let encontrado=null, programa="";
+    const todos=getDocentes();
+    Object.keys(todos).some(prog=>{
+      const d=(todos[prog]||[]).find(x=>String(x.id)===String(id));
+      if(d){encontrado=d;programa=prog;return true;} return false;
+    });
+    if(!encontrado) return renderGestionAccesosAdmin("El docente ya no existe.");
+    document.getElementById("contenido").innerHTML=`
+      <h2 class="panel-title">Editar acceso de docente</h2>
+      <div class="ga-persona"><b>${escAttr(encontrado.nombre)}</b><span>${escAttr(programa)}</span></div>
+      <div id="ga_aviso"></div>
+      <div class="form-grid">
+        <div><label>Usuario</label><input id="ga_usuario" value="${escAttr(encontrado.usuario)}" autocomplete="off"></div>
+        <div><label>Nueva contraseña</label><input id="ga_password" type="password" placeholder="Escribe una nueva solo si deseas cambiarla"></div>
+        <div><label>Confirmar contraseña</label><input id="ga_password2" type="password"></div>
+        <div class="full"><button onclick="guardarAccesoDocenteAdmin('${escAttr(id)}')">Guardar cambios</button><button class="btn-secundario" onclick="renderGestionAccesosAdmin()">Cancelar</button></div>
+      </div>`;
+    return;
+  }
+
+  if(tipo === "estudiante"){
+    const codigo=valor;
+    const e=getEstudiantes()[codigo];
+    if(!e) return renderGestionAccesosAdmin("El estudiante ya no existe.");
+    document.getElementById("contenido").innerHTML=`
+      <h2 class="panel-title">Editar acceso de estudiante</h2>
+      <div class="ga-persona"><b>${escAttr(e.nombre)}</b><span>${escAttr(e.programa || "—")}</span></div>
+      <div class="aviso">Cambiar el código también actualiza el correo institucional y las referencias académicas asociadas.</div>
+      <div id="ga_aviso"></div>
+      <div class="form-grid">
+        <div><label>Nuevo código / usuario</label><input id="ga_usuario" value="${escAttr(e.codigo)}" inputmode="numeric" autocomplete="off"></div>
+        <div><label>Nueva contraseña</label><input id="ga_password" type="password" placeholder="Escribe una nueva solo si deseas cambiarla"></div>
+        <div><label>Confirmar contraseña</label><input id="ga_password2" type="password"></div>
+        <div class="full"><button onclick="guardarAccesoEstudianteAdmin('${escAttr(codigo)}')">Guardar cambios</button><button class="btn-secundario" onclick="renderGestionAccesosAdmin()">Cancelar</button></div>
+      </div>`;
+  }
+}
+
+function validarNuevaCredencialAdmin(usuario,password1,password2){
+  usuario=String(usuario||"").trim();
+  if(!usuario) return "El usuario/código es obligatorio.";
+  if(password1 && password1!==password2) return "La contraseña y su confirmación no coinciden.";
+  return "";
+}
+
+function guardarAccesoCuentaAdmin(idx){
+  if(!adminPuedeGestionarAccesos()) return;
+  const cuentas=getCuentasAdmin();
+  const c=cuentas[idx];
+  if(!c) return renderGestionAccesosAdmin("La cuenta ya no existe.");
+  const usuario=document.getElementById("ga_usuario").value.trim();
+  const p1=document.getElementById("ga_password").value;
+  const p2=document.getElementById("ga_password2").value;
+  const error=validarNuevaCredencialAdmin(usuario,p1,p2);
+  if(error){document.getElementById("ga_aviso").innerHTML=`<div class="aviso aviso-error">${error}</div>`;return;}
+  const repetido=cuentas.some((x,i)=>i!==idx && x.rol===c.rol && x.usuario.toLowerCase()===usuario.toLowerCase());
+  if(repetido){document.getElementById("ga_aviso").innerHTML=`<div class="aviso aviso-error">Ya existe otra cuenta con ese usuario para el mismo rol.</div>`;return;}
+  c.usuario=usuario;
+  if(p1) c.password=p1;
+  saveCuentasAdmin(cuentas);
+  renderGestionAccesosAdmin(`✅ Acceso actualizado para <b>${escAttr(c.usuario)}</b>.`);
+}
+
+function guardarAccesoDocenteAdmin(id){
+  if(!adminPuedeGestionarAccesos()) return;
+  const todos=getDocentes();
+  let d=null, programa="";
+  Object.keys(todos).some(prog=>{
+    const encontrado=(todos[prog]||[]).find(x=>String(x.id)===String(id));
+    if(encontrado){d=encontrado;programa=prog;return true;} return false;
+  });
+  if(!d) return renderGestionAccesosAdmin("El docente ya no existe.");
+  const usuario=document.getElementById("ga_usuario").value.trim();
+  const p1=document.getElementById("ga_password").value;
+  const p2=document.getElementById("ga_password2").value;
+  const error=validarNuevaCredencialAdmin(usuario,p1,p2);
+  if(error){document.getElementById("ga_aviso").innerHTML=`<div class="aviso aviso-error">${error}</div>`;return;}
+  const repetido=Object.keys(todos).some(prog=>(todos[prog]||[]).some(x=>String(x.id)!==String(id) && String(x.usuario||"").toLowerCase()===usuario.toLowerCase()));
+  if(repetido){document.getElementById("ga_aviso").innerHTML=`<div class="aviso aviso-error">Ese usuario ya está asignado a otro docente.</div>`;return;}
+  d.usuario=usuario;
+  if(p1) d.password=p1;
+  saveDocentes(todos);
+  renderGestionAccesosAdmin(`✅ Acceso del docente <b>${escAttr(d.nombre)}</b> actualizado.`);
+}
+
+async function guardarAccesoEstudianteAdmin(codigoAnterior){
+  if(!adminPuedeGestionarAccesos()) return;
+  const estudiantes=getEstudiantes();
+  const e=estudiantes[codigoAnterior];
+  if(!e) return renderGestionAccesosAdmin("El estudiante ya no existe.");
+  const nuevoCodigo=document.getElementById("ga_usuario").value.trim();
+  const p1=document.getElementById("ga_password").value;
+  const p2=document.getElementById("ga_password2").value;
+  const error=validarNuevaCredencialAdmin(nuevoCodigo,p1,p2);
+  if(error){document.getElementById("ga_aviso").innerHTML=`<div class="aviso aviso-error">${error}</div>`;return;}
+  if(!/^\d+$/.test(nuevoCodigo)){document.getElementById("ga_aviso").innerHTML=`<div class="aviso aviso-error">El código del estudiante debe contener solo números.</div>`;return;}
+  if(nuevoCodigo!==codigoAnterior && estudiantes[nuevoCodigo]){document.getElementById("ga_aviso").innerHTML=`<div class="aviso aviso-error">Ese código ya pertenece a otro estudiante.</div>`;return;}
+
+  if(nuevoCodigo!==codigoAnterior){
+    delete estudiantes[codigoAnterior];
+    e.codigo=nuevoCodigo;
+    e.correoInstitucional=nuevoCodigo+"@correo.uan.edu.co";
+    estudiantes[nuevoCodigo]=e;
+  }
+  if(p1) e.password=p1;
+
+  // Persistencia local inmediata antes de tocar Supabase.
+  localStorage.setItem("uan_estudiantes",JSON.stringify(estudiantes));
+  if(nuevoCodigo!==codigoAnterior) await migrarLlaveEstudianteEnDatos(codigoAnterior,nuevoCodigo);
+
+  // Sincronización remota secuencial para evitar que dos borrados/inserciones
+  // completos de tablas se pisen entre sí.
+  await empujarEstudiantesASupabase(estudiantes);
+  if(nuevoCodigo!==codigoAnterior){
+    await empujarMatriculasASupabase(getMatriculas());
+    await empujarNotasASupabase(getNotas());
+    await empujarAsistenciaASupabase(getAsistencia());
+    await empujarEvaluacionesDocenteASupabase(getEvaluacionesDocente());
+    await empujarEvaluacionPendienteASupabase(getEvaluacionPendiente());
+    await empujarHistorialASupabase(getHistorial());
+    await empujarNivelesEstudiantesASupabase(getNivelesEstudiantes());
+    await empujarNormalidadEstudiantesASupabase(getNormalidadEstudiantes());
+  }
+
+  renderGestionAccesosAdmin(`✅ Acceso de <b>${escAttr(e.nombre)}</b> actualizado${nuevoCodigo!==codigoAnterior?` — nuevo código: <b>${escAttr(nuevoCodigo)}</b>`:""}.`);
+}
+
+async function migrarLlaveEstudianteEnDatos(anterior,nuevo){
+  // Matrículas: {codigo: registro}
+  const matriculas=getMatriculas();
+  if(Object.prototype.hasOwnProperty.call(matriculas,anterior)){
+    if(!Object.prototype.hasOwnProperty.call(matriculas,nuevo)) matriculas[nuevo]=matriculas[anterior];
+    delete matriculas[anterior];
+  }
+  localStorage.setItem("uan_matriculas",JSON.stringify(matriculas));
+
+  // Notas y evaluaciones: {grupoId: {codigo: data}}
+  const notas=getNotas();
+  Object.keys(notas).forEach(g=>{
+    if(notas[g] && Object.prototype.hasOwnProperty.call(notas[g],anterior)){
+      if(!Object.prototype.hasOwnProperty.call(notas[g],nuevo)) notas[g][nuevo]=notas[g][anterior];
+      delete notas[g][anterior];
+    }
+  });
+  localStorage.setItem("uan_notas",JSON.stringify(notas));
+
+  const evaluaciones=getEvaluacionesDocente();
+  Object.keys(evaluaciones).forEach(g=>{
+    if(evaluaciones[g] && Object.prototype.hasOwnProperty.call(evaluaciones[g],anterior)){
+      if(!Object.prototype.hasOwnProperty.call(evaluaciones[g],nuevo)) evaluaciones[g][nuevo]=evaluaciones[g][anterior];
+      delete evaluaciones[g][anterior];
+    }
+  });
+  localStorage.setItem("uan_evaluaciones_docente",JSON.stringify(evaluaciones));
+
+  const asistencia=getAsistencia();
+  Object.keys(asistencia).forEach(g=>{
+    const fechas=asistencia[g]||{};
+    Object.keys(fechas).forEach(fecha=>{
+      if(fechas[fecha] && Object.prototype.hasOwnProperty.call(fechas[fecha],anterior)){
+        if(!Object.prototype.hasOwnProperty.call(fechas[fecha],nuevo)) fechas[fecha][nuevo]=fechas[fecha][anterior];
+        delete fechas[fecha][anterior];
+      }
+    });
+  });
+  localStorage.setItem("uan_asistencia",JSON.stringify(asistencia));
+
+  // Estructuras cuyo nivel superior es el código.
+  const renombrarObjeto=(obj,keyOld,keyNew)=>{
+    if(Object.prototype.hasOwnProperty.call(obj,keyOld)){
+      if(!Object.prototype.hasOwnProperty.call(obj,keyNew)) obj[keyNew]=obj[keyOld];
+      delete obj[keyOld];
+    }
+    return obj;
+  };
+  const evalPend=renombrarObjeto(getEvaluacionPendiente(),anterior,nuevo);
+  const historial=renombrarObjeto(getHistorial(),anterior,nuevo);
+  const niveles=renombrarObjeto(getNivelesEstudiantes(),anterior,nuevo);
+  const normalidad=renombrarObjeto(getNormalidadEstudiantes(),anterior,nuevo);
+  localStorage.setItem("uan_evaluacion_pendiente",JSON.stringify(evalPend));
+  localStorage.setItem("uan_historial_academico",JSON.stringify(historial));
+  localStorage.setItem("uan_nivel_estudiante",JSON.stringify(niveles));
+  localStorage.setItem("uan_normalidad_estudiante",JSON.stringify(normalidad));
+
+  // Auditoría local de notas: conservar el historial, cambiando solo la llave.
+  const auditoria=getAuditoriaNotas();
+  auditoria.forEach(x=>{if(String(x.codigo)===String(anterior)) x.codigo=String(nuevo);});
+  guardarAuditoriaNotas(auditoria);
 }
 
 function renderMatricular(){
