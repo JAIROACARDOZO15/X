@@ -1208,16 +1208,36 @@ function registrarActividadUAN(){
   document.addEventListener(ev,registrarActividadUAN,{passive:true});
 });
 setInterval(()=>{
-  if(!usuarioActual) return;
-  const ultima=parseInt(localStorage.getItem(UAN_SECURITY.STORAGE_ACTIVIDAD)||Date.now(),10);
-  if(Date.now()-ultima > UAN_SECURITY.SESION_INACTIVA_MS){
-    const rol=usuarioActual?.rol||"";
-    usuarioActual=null;
+  if(!usuarioActual || typeof usuarioActual !== "object") return;
+
+  const ultima = parseInt(
+    localStorage.getItem(UAN_SECURITY.STORAGE_ACTIVIDAD) || Date.now(),
+    10
+  );
+
+  if(Date.now() - ultima > UAN_SECURITY.SESION_INACTIVA_MS){
+
+    const rol = usuarioActual && typeof usuarioActual === "object"
+      ? String(usuarioActual.rol || usuarioActual.rolCard || "")
+      : "";
+
+    usuarioActual = null;
     localStorage.removeItem(UAN_SECURITY.STORAGE_ACTIVIDAD);
-    if(typeof volverInicio==="function") volverInicio();
-    const error=document.getElementById("loginError");
-    if(error) error.textContent="Sesión cerrada por inactividad.";
-    console.info("Sesión UAN cerrada por inactividad:",rol);
+
+    document.body.classList.remove("uan-dashboard-active");
+
+    const dashboard = document.getElementById("dashboard");
+    const login = document.getElementById("login");
+    const inicio = document.getElementById("inicio");
+
+    if(dashboard) dashboard.style.display = "none";
+    if(login) login.style.display = "none";
+    if(inicio) inicio.style.display = "flex";
+
+    const error = document.getElementById("loginError");
+    if(error) error.textContent = "Sesión cerrada por inactividad.";
+
+    console.info("Sesión UAN cerrada por inactividad:", rol);
   }
 },60000);
 
@@ -1266,14 +1286,35 @@ function mostrarAvisoCargandoInicio(){
 }
 
 function mostrarLogin(r){
-  if(!datosListos){
-    mostrarAvisoCargandoInicio();
-    return;
+  const rolesPermitidos = ["admin","doc","est"];
+  const rol = String(r || "").toLowerCase();
+
+  if(!rolesPermitidos.includes(rol)){
+    console.warn("Rol de acceso no válido:", r);
+    return false;
   }
-  usuarioActual = {rolCard:r};
-  document.getElementById("inicio").style.display="none";
-  document.getElementById("login").style.display="flex";
-  document.getElementById("loginError").textContent = "";
+
+  usuarioActual = {rolCard: rol};
+
+  const inicio = document.getElementById("inicio");
+  const loginBox = document.getElementById("login");
+  const errorEl = document.getElementById("loginError");
+
+  if(!inicio || !loginBox){
+    console.error("UAN: faltan #inicio o #login en index.html.");
+    return false;
+  }
+
+  inicio.style.display = "none";
+  loginBox.style.display = "flex";
+
+  if(errorEl) errorEl.textContent = "";
+
+  const user = document.getElementById("user");
+  const pass = document.getElementById("pass");
+  if(user) user.focus();
+
+  return false;
 }
 
 function volverInicio(){
@@ -1519,16 +1560,25 @@ async function sincronizarTodoSilencioso(){
 }
 setInterval(async ()=>{
   if(!usuarioActual || !datosListos) return;
-  await sincronizarTodoSilencioso();
-  if(usuarioActual.rol === 'estudiante' && VISTAS_ESTUDIANTE_AUTOREFRESH.includes(vistaEstudianteActual)){
-    mostrarPanel(vistaEstudianteActual);
-  } else if(usuarioActual.rol === 'docente' && VISTAS_DOCENTE_AUTOREFRESH.includes(vistaDocenteActual)){
-    irDocente(vistaDocenteActual);
-  }
-  // Admisiones/Director/Coordinador no se refrescan solos (suelen tener
-  // formularios abiertos), pero sus datos en segundo plano sí quedan al día.
-}, 15000);
 
+  try{
+    await sincronizarTodoSilencioso();
+
+    /* IMPORTANTE: durante el await el usuario pudo cerrar el login.
+       Nunca leer usuarioActual.rol sin volver a comprobarlo. */
+    if(!usuarioActual || !datosListos) return;
+
+    if(usuarioActual.rol === 'estudiante' &&
+       VISTAS_ESTUDIANTE_AUTOREFRESH.includes(vistaEstudianteActual)){
+      mostrarPanel(vistaEstudianteActual);
+    } else if(usuarioActual.rol === 'docente' &&
+              VISTAS_DOCENTE_AUTOREFRESH.includes(vistaDocenteActual)){
+      irDocente(vistaDocenteActual);
+    }
+  }catch(err){
+    console.warn("Sincronización periódica UAN:", err);
+  }
+},15000);
 document.addEventListener('DOMContentLoaded', function(){
   const barra = document.querySelector(".sidebar");
   if(!barra) return;
