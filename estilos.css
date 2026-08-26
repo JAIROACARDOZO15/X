@@ -4775,3 +4775,199 @@ html:has(#inicio.inicio-uan),
 body:not(.uan-dashboard-active){
   overflow:hidden!important;
 }
+
+/* ================================================================
+   UAN — FIX SIDEBAR SCROLL V36
+   Permite bajar/subir el menú lateral sin romper el dashboard.
+   ================================================================ */
+
+/* El panel lateral ocupa toda la pantalla y puede desplazarse */
+#dashboard .sidebar{
+  position:fixed!important;
+  left:0!important;
+  top:0!important;
+  bottom:0!important;
+  height:100dvh!important;
+  min-height:0!important;
+  box-sizing:border-box!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  scrollbar-width:thin!important;
+  scrollbar-color:rgba(255,255,255,.38) transparent!important;
+  -webkit-overflow-scrolling:touch!important;
+}
+
+/* Chrome / Edge */
+#dashboard .sidebar::-webkit-scrollbar{
+  width:7px!important;
+}
+#dashboard .sidebar::-webkit-scrollbar-track{
+  background:transparent!important;
+}
+#dashboard .sidebar::-webkit-scrollbar-thumb{
+  background:rgba(255,255,255,.32)!important;
+  border-radius:10px!important;
+}
+#dashboard .sidebar::-webkit-scrollbar-thumb:hover{
+  background:rgba(255,255,255,.55)!important;
+}
+
+/* IMPORTANTE:
+   El menú ya NO debe esconder su propio contenido.
+   La barra de desplazamiento la controla el sidebar completo. */
+#dashboard #menuDinamico{
+  flex:0 0 auto!important;
+  min-height:0!important;
+  height:auto!important;
+  overflow:visible!important;
+}
+
+/* Los submenús tampoco deben recortarse */
+#dashboard #menuDinamico .sub{
+  max-height:none!important;
+  overflow:visible!important;
+}
+
+/* Mantiene todos los elementos del menú completos */
+#dashboard #menuDinamico .menu-item{
+  flex:0 0 auto!important;
+}
+
+/* El botón Salir permanece al final del contenido del sidebar */
+#dashboard .logout-btn{
+  position:static!important;
+  flex:0 0 auto!important;
+  margin:14px 0 6px!important;
+}
+
+/* En móvil, el sidebar también puede desplazarse */
+@media(max-width:900px){
+  #dashboard .sidebar{
+    height:100dvh!important;
+    max-height:100dvh!important;
+    overflow-y:auto!important;
+  }
+}
+
+
+/* ================================================================
+   UAN — FIX SCROLL DERECHA V37
+   El sidebar izquierdo ya tiene scroll.
+   Este parche habilita el scroll VERTICAL del contenido principal.
+   ================================================================ */
+
+/* La página no debe bloquear el scroll del área principal */
+html,
+body {
+  height: 100%;
+  min-height: 100%;
+}
+
+/* Dashboard: pantalla completa sin forzar overflow:hidden global */
+#dashboard {
+  height: 100dvh !important;
+  min-height: 100dvh !important;
+  overflow: hidden !important;
+}
+
+/* Área derecha/principal: AQUÍ debe aparecer el scroll */
+#dashboard .main-content,
+#dashboard .main,
+#dashboard .content,
+#dashboard .dashboard-main,
+#dashboard .main-area,
+#dashboard .page-content {
+  height: 100dvh !important;
+  min-height: 0 !important;
+  max-height: 100dvh !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box !important;
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(20, 70, 120, .55) rgba(20, 30, 40, .08) !important;
+}
+
+/* Chrome / Edge */
+#dashboard .main-content::-webkit-scrollbar,
+#dashboard .main::-webkit-scrollbar,
+#dashboard .content::-webkit-scrollbar,
+#dashboard .dashboard-main::-webkit-scrollbar,
+#dashboard .main-area::-webkit-scrollbar,
+#dashboard .page-content::-webkit-scrollbar {
+  width: 9px !important;
+}
+
+#dashboard .main-content::-webkit-scrollbar-track,
+#dashboard .main::-webkit-scrollbar-track,
+#dashboard .content::-webkit-scrollbar-track,
+#dashboard .dashboard-main::-webkit-scrollbar-track,
+#dashboard .main-area::-webkit-scrollbar-track,
+#dashboard .page-content::-webkit-scrollbar-track {
+  background: rgba(10, 30, 50, .08) !important;
+}
+
+#dashboard .main-content::-webkit-scrollbar-thumb,
+#dashboard .main::-webkit-scrollbar-thumb,
+#dashboard .content::-webkit-scrollbar-thumb,
+#dashboard .dashboard-main::-webkit-scrollbar-thumb,
+#dashboard .main-area::-webkit-scrollbar-thumb,
+#dashboard .page-content::-webkit-scrollbar-thumb {
+  background: rgba(20, 70, 120, .55) !important;
+  border-radius: 10px !important;
+}
+
+#dashboard .main-content::-webkit-scrollbar-thumb:hover,
+#dashboard .main::-webkit-scrollbar-thumb:hover,
+#dashboard .content::-webkit-scrollbar-thumb:hover,
+#dashboard .dashboard-main::-webkit-scrollbar-thumb:hover,
+#dashboard .main-area::-webkit-scrollbar-thumb:hover,
+#dashboard .page-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(20, 70, 120, .8) !important;
+}
+
+/*
+  Si el layout usa flex, el contenido derecho necesita min-width:0
+  y min-height:0 para que pueda crear su propio scroll.
+*/
+#dashboard {
+  display: flex !important;
+  min-width: 0 !important;
+}
+
+#dashboard .sidebar {
+  flex: 0 0 auto !important;
+}
+
+#dashboard .main-content,
+#dashboard .main,
+#dashboard .content,
+#dashboard .dashboard-main,
+#dashboard .main-area,
+#dashboard .page-content {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
+
+/* No dejar que un wrapper intermedio recorte la página */
+#dashboard .dashboard-layout,
+#dashboard .app-layout,
+#dashboard .layout {
+  min-height: 0 !important;
+  height: 100dvh !important;
+}
+
+/* En pantallas pequeñas también debe poder bajar */
+@media (max-width: 900px) {
+  #dashboard .main-content,
+  #dashboard .main,
+  #dashboard .content,
+  #dashboard .dashboard-main,
+  #dashboard .main-area,
+  #dashboard .page-content {
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow-y: auto !important;
+  }
+}
