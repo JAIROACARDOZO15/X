@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="estilos.css?v=25">
+<link rel="stylesheet" href="estilos.css?v=34">
 </head>
 <body>
 
@@ -20,34 +20,38 @@
       <span id="heroHora">--:--:--</span><b>|</b><span id="heroFecha">-- DE -------- DE ----</span><em>Bucaramanga</em>
     </div>
     <div class="hero-status-actions" aria-label="Estado del sistema">
-      <button class="hero-status-action" type="button" onclick="mostrarEstadoSistema('activo')" aria-label="Ver estado del sistema">Sistema activo</button>
-      <button class="hero-status-action" type="button" onclick="mostrarEstadoSistema('sincronizacion')" aria-label="Ver sincronización">Sincronización en tiempo real</button>
-      <button class="hero-status-action" type="button" onclick="mostrarEstadoSistema('seguridad')" aria-label="Ver seguridad de datos">Datos cifrados</button>
-    </div>
+  <button class="hero-status-action" type="button" onclick="return false" aria-label="Sistema activo"></button>
+  <button class="hero-status-action" type="button" onclick="return false" aria-label="Sincronización en tiempo real"></button>
+  <button class="hero-status-action" type="button" onclick="return false" aria-label="Datos cifrados"></button>
+  <span></span>
+</div>
 
     <!-- Accesos institucionales: la imagen es el escenario; estos paneles son los accesos reales. -->
-    <div class="hero-role-grid">
-      <button class="hero-role hero-role-admin" type="button" onclick="mostrarLogin('admin')" aria-label="Ingresar como administrativo">
-        <span class="hero-role-code">ADM <i>01</i></span>
-        <span class="hero-role-icon">▣</span>
-        <span class="hero-role-name">Administrativos</span>
-        <span class="hero-role-action">Ingresar al sistema <b>→</b></span>
-      </button>
-      <button class="hero-role hero-role-doc" type="button" onclick="mostrarLogin('doc')" aria-label="Ingresar como docente">
-        <span class="hero-role-code">DOC <i>02</i></span>
-        <span class="hero-role-icon">⌁</span>
-        <span class="hero-role-name">Docentes</span>
-        <span class="hero-role-action">Ingresar al sistema <b>→</b></span>
-      </button>
-      <button class="hero-role hero-role-est" type="button" onclick="mostrarLogin('est')" aria-label="Ingresar como estudiante">
-        <span class="hero-role-code">EST <i>03</i></span>
-        <span class="hero-role-icon">♙</span>
-        <span class="hero-role-name">Estudiantes</span>
-        <span class="hero-role-action">Ingresar al sistema <b>→</b></span>
-      </button>
-    </div>
-    <div class="hero-access-hint" aria-hidden="true">Selecciona tu perfil para ingresar</div>
-  </div>
+    <div class="hero-role-grid" aria-label="Accesos institucionales">
+  <button class="hero-role hero-role-admin" type="button"
+          onclick="mostrarLogin('admin')" aria-label="Ingresar como administrativo">
+    <span class="hero-role-code">ADM <i>01</i></span>
+    <span class="hero-role-icon">▣</span>
+    <span class="hero-role-name">Administrativos</span>
+    <span class="hero-role-action">INGRESAR AL SISTEMA <b>→</b></span>
+  </button>
+
+  <button class="hero-role hero-role-doc" type="button"
+          onclick="mostrarLogin('doc')" aria-label="Ingresar como docente">
+    <span class="hero-role-code">DOC <i>02</i></span>
+    <span class="hero-role-icon">◇</span>
+    <span class="hero-role-name">Docentes</span>
+    <span class="hero-role-action">INGRESAR AL SISTEMA <b>→</b></span>
+  </button>
+
+  <button class="hero-role hero-role-est" type="button"
+          onclick="mostrarLogin('est')" aria-label="Ingresar como estudiante">
+    <span class="hero-role-code">EST <i>03</i></span>
+    <span class="hero-role-icon">♙</span>
+    <span class="hero-role-name">Estudiantes</span>
+    <span class="hero-role-action">INGRESAR AL SISTEMA <b>→</b></span>
+  </button>
+</div>
 </div>
 
 <!-- ================= LOGIN ================= -->
@@ -63,7 +67,7 @@
     <div id="loginError" class="login-error" aria-live="polite"></div>
     <button class="login-main-btn" onclick="login()">Entrar al sistema <span>→</span></button>
     <button class="volver login-back-btn" onclick="volverInicio()">← Volver al portal</button>
-    <div class="login-status">● SISTEMA ACTIVO · DATOS CIFRADOS</div>
+    <div class="login-status">● SISTEMA ACTIVO · DATOS CIFRADOS · SESIÓN PROTEGIDA</div>
   </div>
 </div>
 
@@ -114,6 +118,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="app.js?v=25"></script>
+<script src="app.js?v=34"></script>
 </body>
 </html>

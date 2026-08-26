@@ -1100,25 +1100,140 @@ function actualizarFechaHora(){
 
   const opcionesHora = {
     timeZone:"America/Bogota",
-    hour:"2-digit", minute:"2-digit", second:"2-digit",
+    hour:"2-digit",
+    minute:"2-digit",
+    second:"2-digit",
     hour12:false
   };
+
   const opcionesFecha = {
     timeZone:"America/Bogota",
-    day:"2-digit", month:"long", year:"numeric"
+    day:"2-digit",
+    month:"long",
+    year:"numeric"
   };
 
-  if(horaEl) horaEl.textContent = new Intl.DateTimeFormat("es-CO", opcionesHora).format(ahora);
+  if(horaEl){
+    horaEl.textContent =
+      new Intl.DateTimeFormat("es-CO", opcionesHora).format(ahora);
+  }
+
   if(fechaEl){
-    const partes = new Intl.DateTimeFormat("es-CO", opcionesFecha).formatToParts(ahora);
+    const partes =
+      new Intl.DateTimeFormat("es-CO", opcionesFecha).formatToParts(ahora);
+
     const dia = partes.find(x=>x.type==="day")?.value || "";
     const mes = (partes.find(x=>x.type==="month")?.value || "").toUpperCase();
     const anio = partes.find(x=>x.type==="year")?.value || "";
+
     fechaEl.textContent = `${dia} DE ${mes} DE ${anio}`;
   }
 }
-setInterval(actualizarFechaHora,1000);
+
 actualizarFechaHora();
+setInterval(actualizarFechaHora,1000);
+
+
+/* ======================================================================
+   UAN V27 — SEGURIDAD Y PROTECCIÓN DE OPERACIONES
+   Base cliente conservada mientras se completa la migración a Supabase Auth + RLS.
+   ====================================================================== */
+/* ======================================================================
+   UAN V26 — SEGURIDAD Y PROTECCIÓN DE OPERACIONES
+   Estas medidas son de capa cliente: evitan pérdidas accidentales,
+   sesiones abandonadas y múltiples intentos consecutivos.
+   La seguridad real de datos debe completarse con Supabase Auth + RLS.
+   ====================================================================== */
+const UAN_SECURITY = {
+  MAX_INTENTOS: 5,
+  BLOQUEO_MS: 60 * 1000,
+  SESION_INACTIVA_MS: 30 * 60 * 1000,
+  STORAGE_LOGIN: "uan_login_seguridad",
+  STORAGE_ACTIVIDAD: "uan_ultima_actividad"
+};
+
+function seguridadEstadoLogin(){
+  try { return JSON.parse(localStorage.getItem(UAN_SECURITY.STORAGE_LOGIN) || "{}"); }
+  catch(e){ return {}; }
+}
+function guardarSeguridadLogin(o){
+  localStorage.setItem(UAN_SECURITY.STORAGE_LOGIN, JSON.stringify(o || {}));
+}
+function seguridadClaveLogin(rol,u){
+  return String(rol||"") + "::" + String(u||"").toLowerCase();
+}
+function loginBloqueado(rol,u){
+  const s=seguridadEstadoLogin()[seguridadClaveLogin(rol,u)] || {};
+  return s.bloqueadoHasta && Date.now() < s.bloqueadoHasta;
+}
+function registrarFalloLogin(rol,u){
+  const all=seguridadEstadoLogin(), key=seguridadClaveLogin(rol,u);
+  const s=all[key] || {intentos:0};
+  s.intentos=(s.intentos||0)+1;
+  if(s.intentos >= UAN_SECURITY.MAX_INTENTOS){
+    s.bloqueadoHasta=Date.now()+UAN_SECURITY.BLOQUEO_MS;
+    s.intentos=0;
+  }
+  all[key]=s;
+  guardarSeguridadLogin(all);
+  return s.bloqueadoHasta || 0;
+}
+function limpiarFalloLogin(rol,u){
+  const all=seguridadEstadoLogin();
+  delete all[seguridadClaveLogin(rol,u)];
+  guardarSeguridadLogin(all);
+}
+function mensajeBloqueoLogin(hasta){
+  const segundos=Math.max(1,Math.ceil((hasta-Date.now())/1000));
+  return `Demasiados intentos. Espera ${segundos} segundos e inténtalo nuevamente.`;
+}
+
+function registrarActividadUAN(){
+  if(usuarioActual) localStorage.setItem(UAN_SECURITY.STORAGE_ACTIVIDAD,String(Date.now()));
+}
+["click","keydown","mousemove","touchstart"].forEach(ev=>{
+  document.addEventListener(ev,registrarActividadUAN,{passive:true});
+});
+setInterval(()=>{
+  if(!usuarioActual) return;
+  const ultima=parseInt(localStorage.getItem(UAN_SECURITY.STORAGE_ACTIVIDAD)||Date.now(),10);
+  if(Date.now()-ultima > UAN_SECURITY.SESION_INACTIVA_MS){
+    const rol=usuarioActual?.rol||"";
+    usuarioActual=null;
+    localStorage.removeItem(UAN_SECURITY.STORAGE_ACTIVIDAD);
+    if(typeof volverInicio==="function") volverInicio();
+    const error=document.getElementById("loginError");
+    if(error) error.textContent="Sesión cerrada por inactividad.";
+    console.info("Sesión UAN cerrada por inactividad:",rol);
+  }
+},60000);
+
+function haySincronizacionPendienteCritica(){
+  return !!(
+    cierreActaEnCurso ||
+    getPendientesSync(SYNC_NOTAS_PENDIENTES).length ||
+    getPendientesSync(SYNC_ACTAS_PENDIENTES).length ||
+    getPendientesSync(SYNC_HISTORIAL_PENDIENTES).length ||
+    localStorage.getItem(SYNC_CONFIG_PENDIENTES)==="1"
+  );
+}
+
+/* No deja cerrar/recargar accidentalmente mientras una operación crítica
+   está subiendo a Supabase. */
+window.addEventListener("beforeunload", function(e){
+  if(cierreActaEnCurso){
+    e.preventDefault();
+    e.returnValue="El acta todavía se está subiendo a Supabase.";
+    return e.returnValue;
+  }
+});
+
+/* Si vuelve internet, vacía inmediatamente las colas pendientes. */
+window.addEventListener("online", async ()=>{
+  try{
+    if(usuarioActual && datosListos) await sincronizarTodoSilencioso();
+  }catch(err){ console.warn("Reintento de sincronización al volver la conexión:",err); }
+});
 
 function mostrarLogin(r){
   if(!datosListos){
@@ -1141,6 +1256,8 @@ function mostrarLogin(r){
 }
 
 function volverInicio(){
+  usuarioActual=null;
+  localStorage.removeItem(UAN_SECURITY.STORAGE_ACTIVIDAD);
   document.body.classList.remove("uan-dashboard-active");
   document.getElementById("login").style.display="none";
   document.getElementById("inicio").style.display="flex";
@@ -1150,14 +1267,27 @@ function login(){
   let u=document.getElementById("user").value.trim();
   let p=document.getElementById("pass").value.trim();
   const rolCard = usuarioActual ? usuarioActual.rolCard : null;
-  document.getElementById("loginError").textContent = "";
+  const errorEl=document.getElementById("loginError");
+  errorEl.textContent = "";
+
+  if(!u || !p){
+    errorEl.textContent="Ingresa usuario y contraseña.";
+    return;
+  }
+  if(loginBloqueado(rolCard,u)){
+    const s=seguridadEstadoLogin()[seguridadClaveLogin(rolCard,u)]||{};
+    errorEl.textContent=mensajeBloqueoLogin(s.bloqueadoHasta);
+    return;
+  }
+
+  let valido=false, sesion=null;
 
   if(rolCard==="admin"){
     const cuenta = getCuentasAdmin().find(c=>c.usuario===u && c.password===p);
-    if(!cuenta){ document.getElementById("loginError").textContent = "Usuario o contraseña incorrectos"; return; }
-    usuarioActual = {rol:cuenta.rol, programa:cuenta.programa || null};
-    entrar();
-    return;
+    if(cuenta){
+      valido=true;
+      sesion={rol:cuenta.rol, programa:cuenta.programa || null};
+    }
   }
 
   if(rolCard==="doc"){
@@ -1167,23 +1297,35 @@ function login(){
       const match = (todosDocentes[prog]||[]).find(d=>d.usuario===u && d.password===p);
       if(match) encontrado = {...match, programa:prog};
     });
-    if(!encontrado){ document.getElementById("loginError").textContent = "Usuario o contraseña incorrectos"; return; }
-    usuarioActual = {rol:"docente", id:encontrado.id, programa:encontrado.programa, nombre:encontrado.nombre, programasAdicionales:encontrado.programasAdicionales||[]};
-    entrar();
-    return;
+    if(encontrado){
+      valido=true;
+      sesion={rol:"docente", id:encontrado.id, programa:encontrado.programa,
+              nombre:encontrado.nombre, programasAdicionales:encontrado.programasAdicionales||[]};
+    }
   }
 
   if(rolCard==="est"){
-    const estudiantes = getEstudiantes();
-    const est = estudiantes[u];
-    if(!est || est.password!==p){ document.getElementById("loginError").textContent = "Usuario o contraseña incorrectos"; return; }
-    usuarioActual = {rol:"estudiante", codigo:u};
-    entrar();
+    const est = getEstudiantes()[u];
+    if(est && est.password===p){
+      valido=true;
+      sesion={rol:"estudiante", codigo:u};
+    }
+  }
+
+  if(!valido){
+    const hasta=registrarFalloLogin(rolCard,u);
+    errorEl.textContent=hasta ? mensajeBloqueoLogin(hasta) : "Usuario o contraseña incorrectos";
     return;
   }
+
+  limpiarFalloLogin(rolCard,u);
+  usuarioActual=sesion;
+  localStorage.setItem(UAN_SECURITY.STORAGE_ACTIVIDAD,String(Date.now()));
+  entrar();
 }
 
 function entrar(){
+  localStorage.setItem(UAN_SECURITY.STORAGE_ACTIVIDAD,String(Date.now()));
   document.getElementById("login").style.display="none";
   document.getElementById("inicio").style.display="none";
   document.body.classList.add("uan-dashboard-active");
@@ -5740,7 +5882,7 @@ function mostrarProgresoSupabase(porcentaje, detalle, estado="subiendo"){
   const color=estado==="error"?"#b42318":estado==="ok"?"#1e5631":"#2e8b57";
   abrirModal(`<div class="sync-progress-modal">
     <div class="sync-progress-icon">${estado==="ok"?"✓":estado==="error"?"⚠":"↻"}</div>
-    <h2>${estado==="ok"?"Sincronización completada":estado==="error"?"Sincronización pendiente":"Subiendo base a Supabase"}</h2>
+    <h2>${estado==="ok"?"Sincronización completada":estado==="error"?"Sincronización pendiente":"Subiendo base a Supabase · no cierres la ventana"}</h2>
     <p>${detalle}</p>
     <div class="sync-progress-track"><div class="sync-progress-fill" style="width:${pct}%;background:${color}"></div></div>
     <div class="sync-progress-row"><b>${pct}%</b><span>${estado==="subiendo"?"Por favor, no te salgas de la plataforma.":estado==="ok"?"Datos guardados correctamente.":"Se conservaron los datos locales y se reintentará la sincronización."}</span></div>

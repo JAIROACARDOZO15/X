@@ -1,1 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 150"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f6d16a"/><stop offset="1" stop-color="#c88f22"/></linearGradient></defs><path d="M60 5 108 20v55c0 34-20 56-48 68C32 131 12 109 12 75V20Z" fill="none" stroke="url(#g)" stroke-width="5"/><path d="M35 62h50v30H35z" fill="none" stroke="#fff" stroke-width="4"/><path d="M45 58c0-15 7-25 15-25s15 10 15 25" fill="none" stroke="url(#g)" stroke-width="5"/><path d="M28 96h64" stroke="#fff" stroke-width="4"/><path d="M24 108c10-8 18-9 28-4M96 108c-10-8-18-9-28-4" fill="none" stroke="url(#g)" stroke-width="3"/><text x="60" y="128" text-anchor="middle" fill="url(#g)" font-family="Georgia,serif" font-size="16" font-weight="700">UAN</text></svg>
+<svg viewBox="0 0 68 82" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Escudo institucional UAN">
+  <defs>
+    <linearGradient id="shieldFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2e8b57"/>
+      <stop offset="100%" stop-color="#0b1c16"/>
+    </linearGradient>
+  </defs>
+
+  <path d="M34 2 L64 12 V40 C64 60 51 73 34 80 C17 73 4 60 4 40 V12 Z"
+        fill="url(#shieldFill)" stroke="#d9a936" stroke-width="2"/>
+
+  <path d="M34 8 L58 16 V40 C58 56 47 67 34 73 C21 67 10 56 10 40 V16 Z"
+        fill="none" stroke="#d9a936" stroke-opacity="0.45" stroke-width="1"/>
+
+  <text x="34" y="46" text-anchor="middle"
+        font-family="'JetBrains Mono',Consolas,monospace" font-weight="600"
+        font-size="19" letter-spacing="1" fill="#f7f5ed">UAN</text>
+
+  <line x1="16" y1="54" x2="52" y2="54" stroke="#d9a936" stroke-opacity="0.6" stroke-width="1.4"/>
+  <text x="34" y="65" text-anchor="middle"
+        font-family="'JetBrains Mono',Consolas,monospace" font-weight="500"
+        font-size="6.5" letter-spacing="2" fill="#d9a936">UNIVERSITAS</text>
+</svg>
