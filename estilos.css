@@ -3700,3 +3700,703 @@ body.rol-estudiante #dashboard .uan-home-head .panel-title{color:#945b0a!importa
 #inicio.inicio-uan .hero-role-grid{
   z-index:8 !important;
 }
+
+/* V43 — módulos transversales */
+.uan-module-shell{max-width:1200px;margin:0 auto;padding:26px 28px 60px}.uan-module-hero{background:linear-gradient(135deg,#0c2a1e,#123d2b);border:1px solid rgba(213,166,65,.28);border-radius:22px;padding:30px;color:#fff;box-shadow:0 18px 50px rgba(0,0,0,.12)}.uan-module-hero span,.uan-card-kicker{font:600 11px 'JetBrains Mono',monospace;letter-spacing:2px;color:#d8b45c}.uan-module-hero h1{margin:8px 0;font-family:Fraunces,serif;font-size:38px}.uan-module-hero p{margin:0;color:#d8e4de}.uan-module-toolbar{display:flex;gap:10px;justify-content:flex-end;margin:18px 0;flex-wrap:wrap}.uan-kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin:18px 0}.uan-kpi-grid>div{background:#fff;border:1px solid #dfe6e2;border-radius:16px;padding:20px;box-shadow:0 8px 24px rgba(0,0,0,.05)}.uan-kpi-grid span{display:block;font:600 10px 'JetBrains Mono',monospace;letter-spacing:1.4px;color:#66746d}.uan-kpi-grid b{display:block;font-size:30px;margin-top:8px;color:#0c3554}.uan-two-col{display:grid;grid-template-columns:1.4fr 1fr;gap:18px}.uan-card{background:#fff;border:1px solid #dfe6e2;border-radius:18px;padding:22px;box-shadow:0 8px 28px rgba(0,0,0,.05);margin-top:18px}.uan-card h2{font-family:Fraunces,serif;margin:7px 0 18px}.uan-table-wrap{overflow:auto;background:#fff;border-radius:16px;border:1px solid #e3e8e5}.uan-table{width:100%;border-collapse:collapse;min-width:680px}.uan-table th,.uan-table td{padding:13px 15px;text-align:left;border-bottom:1px solid #e8ecea;font-size:13px}.uan-table th{background:#f5f8f6;color:#496056;font:600 11px 'JetBrains Mono',monospace;letter-spacing:.7px}.uan-stat-list>div{display:flex;justify-content:space-between;padding:15px 0;border-bottom:1px solid #edf0ee}.uan-stat-list b{color:#0b5b3d}.uan-calendar-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:20px}.uan-event-card{display:flex;gap:18px;background:#fff;border:1px solid #dfe6e2;border-radius:18px;padding:18px;box-shadow:0 8px 24px rgba(0,0,0,.05)}.uan-event-date{width:70px;height:76px;border-radius:14px;background:#0c3a2a;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:none}.uan-event-date b{font-size:28px}.uan-event-date span{font-size:11px;color:#d8b45c}.uan-event-type{font:600 10px 'JetBrains Mono',monospace;color:#9a7223;letter-spacing:1px}.uan-event-card h3{margin:5px 0;font-family:Fraunces,serif}.uan-event-card p{margin:0 0 8px;color:#66746d}.uan-event-card small{color:#65766e}.uan-help-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:20px}.uan-faq{background:#fff;border:1px solid #dfe6e2;border-radius:16px;padding:18px;box-shadow:0 8px 24px rgba(0,0,0,.04)}.uan-faq summary{cursor:pointer;font-weight:700;color:#173f5c}.uan-faq p{color:#66746d;line-height:1.6;margin:12px 0 0}.uan-support-card{margin-top:20px;border-radius:20px;padding:24px;background:linear-gradient(135deg,#0d3859,#0d6042);color:#fff;display:flex;align-items:center;justify-content:space-between;gap:20px}.uan-support-card span{font:600 10px 'JetBrains Mono',monospace;letter-spacing:1.5px;color:#d8b45c}.uan-support-card h2{font-family:Fraunces,serif;margin:6px 0}.uan-support-card p{margin:0;color:#dce9e3}.uan-support-card button{border:1px solid #d8b45c;background:rgba(255,255,255,.08);color:#fff;border-radius:12px;padding:13px 18px;font-weight:700;cursor:pointer}.uan-notif-actions{display:flex;justify-content:flex-end;margin-bottom:10px}.uan-notif-item.is-read{opacity:.55}.uan-notif-item{transition:.2s}.uan-notif-item:hover{transform:translateX(2px)}
+@media(max-width:900px){.uan-kpi-grid{grid-template-columns:repeat(2,1fr)}.uan-two-col,.uan-calendar-grid,.uan-help-grid{grid-template-columns:1fr}.uan-support-card{flex-direction:column;align-items:flex-start}.uan-module-shell{padding:18px 14px 40px}}
+@media(max-width:560px){.uan-kpi-grid{grid-template-columns:1fr}.uan-module-hero h1{font-size:30px}.uan-event-card{flex-direction:column}.uan-event-date{width:100%;height:62px;flex-direction:row;gap:10px}}
+@media print{.topbar,.sidebar,.uan-module-toolbar{display:none!important}.content{margin:0!important}.uan-module-shell{max-width:none}.uan-card,.uan-kpi-grid>div{box-shadow:none}}
+
+/* ================================================================
+   UAN V44 — CORRECCIONES DE LAYOUT
+   1) Modales respetan la barra lateral y se centran en el contenido.
+   2) Bandeja de mensajes/notificaciones con apariencia consistente.
+   3) Menú lateral con scroll propio; "Salir" nunca se superpone.
+   ================================================================ */
+
+/* --- SIDEBAR: el menú crece y se desplaza sin tapar SALIR --- */
+#dashboard #menuDinamico{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  padding-right:4px!important;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(255,255,255,.38) transparent;
+}
+#dashboard #menuDinamico::-webkit-scrollbar{width:6px!important;}
+#dashboard #menuDinamico::-webkit-scrollbar-track{background:transparent!important;}
+#dashboard #menuDinamico::-webkit-scrollbar-thumb{
+  background:rgba(255,255,255,.32)!important;
+  border-radius:20px!important;
+}
+#dashboard #menuDinamico::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.55)!important;}
+#dashboard .logout-btn{
+  position:static!important;
+  flex:0 0 auto!important;
+  display:block!important;
+  width:100%!important;
+  min-height:42px!important;
+  margin:10px 0 0!important;
+  z-index:2!important;
+}
+
+/* --- ICONOS DE LA BARRA SUPERIOR --- */
+#dashboard .uan-topbar-action{
+  position:relative!important;
+  width:38px!important;
+  height:38px!important;
+  min-width:38px!important;
+  padding:0!important;
+  border:1px solid #e2e8e4!important;
+  border-radius:10px!important;
+  background:#fff!important;
+  color:#31533f!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  font-size:17px!important;
+  line-height:1!important;
+  cursor:pointer!important;
+  box-shadow:0 2px 8px rgba(20,40,28,.06)!important;
+}
+#dashboard .uan-topbar-action:hover{
+  background:#f5f9f6!important;
+  border-color:#c9d8ce!important;
+  color:#174d31!important;
+  transform:translateY(-1px)!important;
+}
+#dashboard .uan-notif-trigger i{
+  position:absolute!important;
+  top:-5px!important;
+  right:-5px!important;
+  min-width:17px!important;
+  height:17px!important;
+  padding:0 4px!important;
+  border-radius:20px!important;
+  background:#d64b43!important;
+  color:#fff!important;
+  font:700 9px/17px var(--uan-mono)!important;
+  text-align:center!important;
+  border:2px solid #fff!important;
+  display:none;
+}
+#dashboard .uan-notif-trigger i.visible{display:block!important;}
+
+/* --- MODALES: nunca quedan escondidos detrás de la sidebar --- */
+#dashboard + .modal-fondo,
+body .modal-fondo{
+  position:fixed!important;
+  top:0!important;
+  right:0!important;
+  bottom:0!important;
+  left:270px!important;
+  width:auto!important;
+  height:auto!important;
+  z-index:2000!important;
+  box-sizing:border-box!important;
+  display:none!important;
+  align-items:flex-start!important;
+  justify-content:center!important;
+  padding:34px 30px!important;
+  overflow-y:auto!important;
+  background:rgba(11,27,19,.50)!important;
+  backdrop-filter:blur(4px)!important;
+}
+#dashboard + .modal-fondo.abierto,
+body .modal-fondo.abierto{display:flex!important;}
+body .modal-caja{
+  position:relative!important;
+  width:min(900px,100%)!important;
+  max-width:900px!important;
+  max-height:calc(100vh - 68px)!important;
+  overflow-y:auto!important;
+  margin:0 auto!important;
+  box-sizing:border-box!important;
+  background:#fff!important;
+  border:1px solid #dfe8e1!important;
+  border-radius:18px!important;
+  padding:28px!important;
+  box-shadow:0 25px 70px rgba(5,25,14,.28)!important;
+}
+body .modal-cerrar{
+  position:absolute!important;
+  top:13px!important;
+  right:15px!important;
+  width:34px!important;
+  height:34px!important;
+  padding:0!important;
+  border:1px solid #e0e6e1!important;
+  border-radius:9px!important;
+  background:#f7f9f7!important;
+  color:#647269!important;
+  font:600 20px/32px Arial,sans-serif!important;
+  text-align:center!important;
+  cursor:pointer!important;
+}
+body .modal-cerrar:hover{
+  background:#edf3ee!important;
+  color:#244b34!important;
+  transform:none!important;
+}
+
+/* --- MENSAJERÍA / NOTIFICACIONES --- */
+.uan-notif-modal{width:100%!important;box-sizing:border-box!important;padding:4px 0!important;}
+.uan-modal-kicker{
+  display:block!important;
+  margin-bottom:7px!important;
+  color:#4f8a66!important;
+  font:700 10px/1.3 var(--uan-mono)!important;
+  letter-spacing:.14em!important;
+  text-transform:uppercase!important;
+}
+.uan-notif-modal h2{
+  margin:0 40px 7px 0!important;
+  font-size:30px!important;
+  line-height:1.1!important;
+}
+.uan-notif-modal>p:not(.uan-empty-state){margin:0 0 18px!important;color:#6c7b72!important;}
+.uan-empty-state{
+  margin:14px 0 0!important;
+  padding:22px!important;
+  border:1px dashed #cad9ce!important;
+  border-radius:12px!important;
+  background:#f7faf8!important;
+  color:#65746b!important;
+  line-height:1.55!important;
+}
+.uan-notif-list{display:grid!important;gap:10px!important;margin-top:16px!important;}
+.uan-notif-item{
+  width:100%!important;
+  display:grid!important;
+  grid-template-columns:40px minmax(0,1fr) 20px!important;
+  align-items:center!important;
+  gap:12px!important;
+  text-align:left!important;
+  padding:13px 15px!important;
+  border:1px solid #e0e8e2!important;
+  border-radius:12px!important;
+  background:#fff!important;
+  color:#26382e!important;
+  cursor:pointer!important;
+}
+.uan-notif-item:hover{background:#f6faf7!important;border-color:#c9dbce!important;transform:none!important;}
+.uan-notif-icon{width:36px;height:36px;display:grid;place-items:center;border-radius:10px;background:#edf6ef;font-size:18px;}
+.uan-notif-item.warning .uan-notif-icon{background:#fff5df;}
+.uan-notif-item.danger .uan-notif-icon{background:#fdebea;}
+.uan-notif-item.success .uan-notif-icon{background:#e9f7ee;}
+.uan-notif-item span:nth-child(2){min-width:0;}
+.uan-notif-item b{display:block;font-size:13px;margin-bottom:3px;}
+.uan-notif-item small{display:block;color:#718077;font-size:11px;line-height:1.4;}
+.uan-notif-item em{font-style:normal;font-size:22px;color:#91a097;}
+.uan-notif-actions{display:flex;justify-content:flex-end;margin:8px 0 4px;}
+
+/* En pantallas pequeñas el modal vuelve a ocupar toda la pantalla. */
+@media(max-width:700px){
+  #dashboard + .modal-fondo,
+  body .modal-fondo{
+    left:0!important;
+    padding:16px!important;
+  }
+  body .modal-caja{max-height:calc(100vh - 32px)!important;padding:22px 18px!important;border-radius:15px!important;}
+}
+
+/* ================================================================
+   UAN V45 — SIDEBAR / MODULOS / MODALES DEFINITIVOS
+   - Sidebar con scroll propio y Salir siempre visible.
+   - El contenido ocupa únicamente el área derecha.
+   - Todos los módulos y modales se renderizan dentro del área útil.
+   ================================================================ */
+
+/* Estructura general del dashboard */
+#dashboard{
+  position:relative!important;
+  min-height:100dvh!important;
+  width:100%!important;
+  overflow:visible!important;
+}
+
+/* Barra superior: nunca queda debajo del contenido */
+#dashboard .topbar{
+  position:sticky!important;
+  top:0!important;
+  left:270px!important;
+  width:calc(100% - 270px)!important;
+  margin-left:270px!important;
+  box-sizing:border-box!important;
+  z-index:80!important;
+}
+
+/* Sidebar: estructura vertical real */
+#dashboard .sidebar{
+  position:fixed!important;
+  left:0!important;
+  top:0!important;
+  bottom:0!important;
+  width:270px!important;
+  height:100dvh!important;
+  min-height:0!important;
+  box-sizing:border-box!important;
+  padding:0 16px 14px!important;
+  margin:0!important;
+  display:flex!important;
+  flex-direction:column!important;
+  overflow:hidden!important;
+  z-index:100!important;
+}
+
+#dashboard .sidebar-brand,
+#dashboard .sidebar .userbox,
+#dashboard .menu-heading{
+  flex:0 0 auto!important;
+}
+
+/* ÚNICAMENTE el menú se desplaza */
+#dashboard #menuDinamico{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  padding:0 0 10px!important;
+  scrollbar-width:thin!important;
+  scrollbar-color:rgba(255,255,255,.42) transparent!important;
+}
+#dashboard #menuDinamico::-webkit-scrollbar{width:7px!important;}
+#dashboard #menuDinamico::-webkit-scrollbar-track{background:transparent!important;}
+#dashboard #menuDinamico::-webkit-scrollbar-thumb{
+  background:rgba(255,255,255,.38)!important;
+  border-radius:10px!important;
+}
+#dashboard #menuDinamico::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.62)!important;}
+
+/* Salir: fuera del scroll, siempre visible y sin tapar opciones */
+#dashboard .logout-btn{
+  position:relative!important;
+  left:auto!important;
+  right:auto!important;
+  bottom:auto!important;
+  flex:0 0 auto!important;
+  width:100%!important;
+  box-sizing:border-box!important;
+  margin:8px 0 4px!important;
+  padding:12px!important;
+  z-index:5!important;
+}
+
+/* Área de contenido: SOLO a la derecha del sidebar */
+#dashboard .content{
+  width:calc(100% - 270px)!important;
+  max-width:none!important;
+  margin-left:270px!important;
+  box-sizing:border-box!important;
+  min-width:0!important;
+  overflow-x:hidden!important;
+  overflow-y:visible!important;
+  padding:30px 34px 46px!important;
+}
+
+/* Todos los módulos nuevos ocupan correctamente el ancho disponible */
+#dashboard .uan-module-shell{
+  width:100%!important;
+  max-width:1400px!important;
+  min-width:0!important;
+  margin:0 auto!important;
+  box-sizing:border-box!important;
+}
+#dashboard .uan-module-shell > *{min-width:0!important;box-sizing:border-box!important;}
+#dashboard .uan-module-hero{width:100%!important;box-sizing:border-box!important;}
+#dashboard .uan-kpi-grid,
+#dashboard .uan-two-col,
+#dashboard .uan-calendar-grid,
+#dashboard .uan-help-grid,
+#dashboard .uan-quick-grid,
+#dashboard .uan-stats-grid{width:100%!important;min-width:0!important;box-sizing:border-box!important;}
+#dashboard .uan-two-col > *,
+#dashboard .uan-calendar-grid > *,
+#dashboard .uan-help-grid > *{min-width:0!important;}
+#dashboard .uan-table-wrap{max-width:100%!important;overflow-x:auto!important;}
+
+/* Modales: jamás deben quedar detrás de la barra izquierda */
+#dashboard ~ .modal-fondo,
+.modal-fondo{
+  position:fixed!important;
+  top:0!important;
+  right:0!important;
+  bottom:0!important;
+  left:270px!important;
+  width:auto!important;
+  height:auto!important;
+  box-sizing:border-box!important;
+  z-index:5000!important;
+  padding:24px!important;
+  display:none;
+  align-items:center!important;
+  justify-content:center!important;
+  overflow:auto!important;
+}
+#dashboard ~ .modal-fondo.abierto,
+.modal-fondo.abierto{display:flex!important;}
+#dashboard ~ .modal-fondo .modal-caja,
+.modal-fondo .modal-caja{
+  width:min(1100px,100%)!important;
+  max-width:1100px!important;
+  max-height:calc(100dvh - 48px)!important;
+  margin:auto!important;
+  box-sizing:border-box!important;
+  overflow:auto!important;
+}
+
+/* Las ventanas de mensajes/notificaciones también quedan centradas en el área útil */
+.uan-notif-modal,
+.status-modal{
+  width:100%!important;
+  max-width:100%!important;
+  box-sizing:border-box!important;
+}
+
+/* Evita que botones/textos de módulos se corten */
+#dashboard button,
+#dashboard input,
+#dashboard select,
+#dashboard textarea{box-sizing:border-box!important;}
+#dashboard .uan-quick-card,
+#dashboard .uan-stat-card,
+#dashboard .dashboard-tile{min-width:0!important;}
+
+/* Tablet */
+@media(max-width:1000px){
+  #dashboard .sidebar{width:245px!important;}
+  #dashboard .topbar{
+    left:245px!important;
+    width:calc(100% - 245px)!important;
+    margin-left:245px!important;
+  }
+  #dashboard .content{
+    width:calc(100% - 245px)!important;
+    margin-left:245px!important;
+    padding:26px 22px 42px!important;
+  }
+  #dashboard ~ .modal-fondo,
+  .modal-fondo{left:245px!important;}
+}
+
+/* Móvil: sidebar se abre encima del contenido y los modales usan toda la pantalla */
+@media(max-width:700px){
+  #dashboard .topbar{
+    left:0!important;
+    width:100%!important;
+    margin-left:0!important;
+    height:60px!important;
+  }
+  #dashboard .sidebar{
+    top:60px!important;
+    bottom:0!important;
+    width:280px!important;
+    height:calc(100dvh - 60px)!important;
+    transform:translateX(-105%)!important;
+    transition:transform .22s ease!important;
+  }
+  #dashboard .sidebar.mostrar-movil{
+    display:flex!important;
+    transform:translateX(0)!important;
+  }
+  #dashboard .content{
+    width:100%!important;
+    margin-left:0!important;
+    padding:22px 14px 36px!important;
+  }
+  #dashboard ~ .modal-fondo,
+  .modal-fondo{
+    left:0!important;
+    padding:12px!important;
+  }
+  #dashboard ~ .modal-fondo .modal-caja,
+  .modal-fondo .modal-caja{
+    max-height:calc(100dvh - 24px)!important;
+  }
+}
+
+/* Pantallas muy pequeñas */
+@media(max-width:480px){
+  #dashboard .sidebar{width:290px!important;}
+  #dashboard .uan-module-shell{padding-left:0!important;padding-right:0!important;}
+}
+
+/* UAN V46 modules */
+.uan-mail-list,.uan-ticket-list,.uan-cert-list{display:grid;gap:12px}
+.uan-mail-card,.uan-ticket-card,.uan-cert-card{background:#fff;border:1px solid #dce5ea;border-radius:14px;padding:16px;box-shadow:0 6px 18px rgba(8,30,45,.05)}
+.uan-mail-card{display:flex;gap:16px;align-items:flex-start;justify-content:space-between}
+.uan-mail-card p{margin:8px 0 0;color:#536575;line-height:1.55;flex:1}
+.uan-mail-card small,.uan-cert-card small,.uan-ticket-card small{display:block;color:#718292;margin-top:5px}
+.uan-ticket-card h3{margin:8px 0 4px}.uan-ticket-body{background:#f5f8fa;border-radius:10px;padding:14px;margin:12px 0;line-height:1.55;white-space:pre-wrap}
+.uan-cert-card{display:flex;justify-content:space-between;align-items:center;gap:16px}.uan-cert-card button,.uan-support-card button,.uan-certificate button{cursor:pointer}
+.uan-help-note{font-size:12px;color:#748392;margin-top:10px}.uan-pill{display:inline-flex;align-items:center;width:max-content;padding:5px 10px;border-radius:999px;background:#eef5f1;color:#275f48;font-size:11px;font-weight:700}
+.uan-certificate{background:#fff;padding:34px;border:1px solid #d7dfe4;border-radius:4px;color:#17242c;text-align:center;max-width:780px;margin:auto}.uan-cert-head{display:flex;justify-content:center;align-items:center;gap:14px;text-align:left;border-bottom:2px solid #c89b3c;padding-bottom:18px}.uan-cert-head img{width:68px;height:68px}.uan-cert-head b{display:block;font-family:Georgia,serif;font-size:18px}.uan-cert-head small{display:block;color:#6c7b85;margin-top:4px}.uan-certificate h1{font-family:Georgia,serif;margin:34px 0 18px;color:#173b2b}.uan-certificate h2{font-family:Georgia,serif;font-size:26px}.uan-certificate p{line-height:1.7;color:#45555f}.uan-cert-number{margin:28px 0;padding:12px;border-top:1px solid #ddd;border-bottom:1px solid #ddd;font-family:monospace;color:#58666e}.uan-cert-firmas{display:grid;grid-template-columns:1fr 1fr;gap:70px;margin:46px 30px 20px;align-items:end}.uan-cert-firma{text-align:center;min-width:0}.uan-firma-img-wrap{height:90px;display:flex;align-items:flex-end;justify-content:center}.uan-firma-img-wrap img{max-width:210px;max-height:82px;width:auto;height:auto;object-fit:contain}.uan-firma-line{border-top:1px solid #26333a;margin:4px auto 8px;max-width:240px}.uan-cert-firma b{display:block;font-size:13px;color:#17242c}.uan-cert-firma small{display:block;color:#6c7b85;margin-top:4px}.uan-cert-actions{display:flex;justify-content:center;gap:10px;margin-top:24px}
+@media print{body *{visibility:hidden!important}.uan-certificate,.uan-certificate *{visibility:visible!important}.uan-certificate{position:absolute;left:0;top:0;width:100%;max-width:none;border:0;box-shadow:none}.uan-cert-actions{display:none!important}}
+@media(max-width:700px){.uan-mail-card,.uan-cert-card{display:block}.uan-mail-card .uan-pill,.uan-cert-card .uan-pill{margin-top:10px}.uan-cert-actions{flex-direction:column}.uan-cert-firmas{grid-template-columns:1fr;gap:28px;margin-left:10px;margin-right:10px}.uan-certificate{padding:20px}}
+
+/* ================================================================
+   UAN V47 — AJUSTE FINAL DE NAVEGACIÓN LATERAL
+   - Todos los módulos permanecen en la barra izquierda.
+   - El menú lateral tiene su propio scroll y nunca queda tapado por Salir.
+   - Salir queda fijo al final de la barra, separado del listado.
+   - El botón ☰ queda junto al inicio del contenido, no desplazado hacia
+     el centro por reglas antiguas de padding.
+   ================================================================ */
+
+/* Barra superior: el menú hamburguesa vuelve a la izquierda del contenido. */
+#dashboard .topbar{
+  padding:0 18px!important;
+}
+#dashboard .topbar > div:first-child{
+  margin-left:0!important;
+  padding-left:0!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:12px!important;
+}
+#dashboard .topbar > div:last-child{
+  margin-right:0!important;
+}
+#dashboard .topbar > div:first-child .topbar-icon{
+  flex:0 0 auto!important;
+  width:28px!important;
+  text-align:center!important;
+  font-size:20px!important;
+  line-height:1!important;
+}
+
+/* Sidebar: estructura vertical real. */
+#dashboard .sidebar{
+  display:flex!important;
+  flex-direction:column!important;
+  height:100vh!important;
+  min-height:100vh!important;
+  box-sizing:border-box!important;
+  overflow:hidden!important;
+  padding:20px 16px 14px!important;
+}
+
+/* La navegación ocupa el espacio disponible y puede desplazarse sin
+   mover/ocultar el botón Salir. */
+#dashboard .menu-heading{
+  flex:0 0 auto!important;
+}
+#dashboard #menuDinamico{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  padding-right:3px!important;
+  scrollbar-width:thin!important;
+  scrollbar-color:rgba(255,255,255,.35) transparent!important;
+}
+#dashboard #menuDinamico::-webkit-scrollbar{
+  width:6px!important;
+}
+#dashboard #menuDinamico::-webkit-scrollbar-track{
+  background:transparent!important;
+}
+#dashboard #menuDinamico::-webkit-scrollbar-thumb{
+  background:rgba(255,255,255,.30)!important;
+  border-radius:10px!important;
+}
+#dashboard #menuDinamico::-webkit-scrollbar-thumb:hover{
+  background:rgba(255,255,255,.50)!important;
+}
+
+/* Salir ya no se superpone a ningún módulo. */
+#dashboard .logout-btn{
+  position:static!important;
+  flex:0 0 auto!important;
+  display:block!important;
+  width:100%!important;
+  box-sizing:border-box!important;
+  margin:12px 0 0!important;
+  padding:11px 14px!important;
+}
+
+/* Cuando la pantalla es suficientemente baja, se reduce el espacio de
+   cabecera para que sigan entrando más módulos antes del scroll. */
+@media (max-height:760px) and (min-width:701px){
+  #dashboard .sidebar{padding-top:12px!important;padding-bottom:10px!important;}
+  #dashboard .sidebar .sidebar-brand{min-height:105px!important;padding-bottom:13px!important;}
+  #dashboard .sidebar .sidebar-logo{width:58px!important;height:70px!important;}
+  #dashboard .sidebar .userbox{padding-top:12px!important;padding-bottom:12px!important;}
+  #dashboard .sidebar .userbox img{width:62px!important;height:62px!important;margin-bottom:8px!important;}
+  #dashboard .menu-heading{padding-top:12px!important;padding-bottom:7px!important;}
+  #dashboard .menu-item{min-height:40px!important;padding:9px 11px!important;margin:1px 0!important;}
+}
+
+/* En móvil el sidebar sigue siendo desplegable y conserva el mismo orden. */
+@media (max-width:700px){
+  #dashboard .topbar{padding:0 14px!important;}
+  #dashboard .topbar > div:first-child{gap:9px!important;}
+  #dashboard .sidebar{
+    height:100vh!important;
+    max-height:100vh!important;
+    overflow:hidden!important;
+  }
+  #dashboard .sidebar.mostrar-movil{display:flex!important;}
+  #dashboard #menuDinamico{overflow-y:auto!important;}
+  #dashboard .logout-btn{margin-top:10px!important;}
+}
+
+/* ================================================================
+   UAN V48 — NAVEGACIÓN FINAL + MÓDULOS DUPLICADOS EN INICIO
+   ================================================================ */
+
+/* El encabezado comienza exactamente después de la barra lateral.
+   Se elimina el doble desplazamiento que mandaba el ☰ al centro. */
+#dashboard .topbar{
+  position:fixed!important;
+  top:0!important;
+  left:270px!important;
+  right:0!important;
+  width:calc(100% - 270px)!important;
+  margin-left:0!important;
+  box-sizing:border-box!important;
+  padding:0 18px!important;
+  z-index:80!important;
+}
+#dashboard .topbar > div:first-child{
+  margin-left:0!important;
+  padding-left:0!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:12px!important;
+}
+#dashboard .topbar > div:first-child .topbar-icon{
+  width:32px!important;
+  min-width:32px!important;
+  margin:0!important;
+  padding:0!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+}
+#dashboard .topbar > div:last-child{
+  margin-left:auto!important;
+  margin-right:0!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:10px!important;
+}
+
+/* Salir pasa al encabezado, junto a correo/notificaciones.
+   El botón antiguo de la barra lateral se oculta para evitar duplicados. */
+#dashboard .sidebar > .logout-btn{display:none!important;}
+#dashboard .topbar-logout{
+  width:auto!important;
+  min-width:72px!important;
+  height:40px!important;
+  padding:0 12px!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:6px!important;
+  border:1px solid #d9e1e8!important;
+  border-radius:10px!important;
+  background:#fff!important;
+  color:#7c2f35!important;
+  font-size:13px!important;
+  font-weight:700!important;
+  box-shadow:0 2px 8px rgba(20,38,58,.04)!important;
+}
+#dashboard .topbar-logout:hover{
+  background:#fff5f5!important;
+  color:#a32832!important;
+  transform:none!important;
+}
+#dashboard .topbar-logout span{font-size:12px!important;}
+
+/* En inicio, la derecha muestra TODOS los módulos disponibles para el rol. */
+#dashboard .uan-quick-grid{
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  align-items:stretch!important;
+  gap:14px!important;
+}
+#dashboard .uan-quick-card{
+  min-height:86px!important;
+  cursor:pointer!important;
+}
+#dashboard .uan-quick-copy b{
+  line-height:1.2!important;
+}
+#dashboard .uan-quick-copy small{
+  white-space:normal!important;
+  line-height:1.35!important;
+}
+
+@media(max-width:1100px) and (min-width:701px){
+  #dashboard .topbar,
+  #dashboard .content{margin-left:250px!important;}
+  #dashboard .topbar{left:0!important;width:calc(100% - 250px)!important;}
+}
+
+@media(max-width:700px){
+  #dashboard .topbar{
+    left:0!important;
+    width:100%!important;
+    margin-left:0!important;
+    padding:0 12px!important;
+  }
+  #dashboard .topbar > div:first-child{gap:7px!important;}
+  #dashboard .topbar .brand{font-size:13px!important;}
+  #dashboard .topbar > div:last-child{gap:5px!important;}
+  #dashboard .topbar-logout{min-width:40px!important;width:40px!important;padding:0!important;}
+  #dashboard .topbar-logout span{display:none!important;}
+  #dashboard .uan-quick-grid{grid-template-columns:1fr!important;}
+}
+
+/* V50 — destinatarios dirigidos y certificado de notas */
+#mailDestinoDetalle{grid-column:1/-1}
+#mailDestinoDetalle select{width:100%;box-sizing:border-box}
+.uan-cert-notas{margin:26px 0;text-align:left}
+.uan-cert-notas h3{font-family:Georgia,serif;color:#173b2b;margin-bottom:12px;text-align:center}
+.uan-cert-notas table{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+.uan-cert-notas th,.uan-cert-notas td{border:1px solid #d7dfe4;padding:9px 10px;text-align:center}
+.uan-cert-notas th:first-child,.uan-cert-notas td:first-child{text-align:left}
+.uan-cert-notas th{background:#eef5f0;color:#173b2b}
+.uan-cert-promedio{display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding:14px 16px;background:#f5f8f6;border:1px solid #d7e4db;border-radius:8px;color:#173b2b}
+.uan-cert-promedio b{font-size:22px;font-family:Georgia,serif}
+@media(max-width:700px){.uan-cert-notas{overflow-x:auto}.uan-cert-notas table{min-width:560px}.uan-cert-promedio{gap:12px}}
+\n\n/* V51 — correo institucional estilo Gmail */\n.uan-mail-row{cursor:pointer;transition:transform .15s ease,box-shadow .15s ease;}\n.uan-mail-row:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(0,0,0,.08);}\n.uan-mail-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;}\n.uan-mail-cc-row{display:flex;gap:8px;}\n.uan-mail-view{max-width:760px;}\n.uan-mail-body{margin:20px 0;padding:20px;border:1px solid rgba(20,40,60,.10);border-radius:12px;background:#f7f9fb;line-height:1.7;white-space:normal;}\n.uan-mail-compose label{display:block;font-size:12px;font-weight:700;margin-top:6px;}\n
+
+/* UAN V52 - ACCIONES DE BORRADO */
+.uan-delete-btn{
+  border:1px solid rgba(180,35,45,.25)!important;
+  background:rgba(180,35,45,.08)!important;
+  color:#a91f2b!important;
+  border-radius:8px!important;
+  padding:7px 10px!important;
+  cursor:pointer!important;
+  font-weight:700!important;
+}
+.uan-delete-btn:hover{
+  background:rgba(180,35,45,.15)!important;
+}
+
+/* UAN V53 - MAIL ACTIONS */
+.uan-mail-actions{display:flex;gap:8px;align-items:center;margin-top:10px;justify-content:flex-end}
+.uan-mail-card-main{cursor:pointer;flex:1}
+.uan-inline-delete{
+  border:1px solid rgba(160,30,45,.25)!important;
+  background:rgba(160,30,45,.07)!important;
+  color:#a51f2e!important;
+  border-radius:8px!important;
+  padding:6px 9px!important;
+  cursor:pointer!important;
+  font-weight:700!important;
+}
+.uan-inline-delete:hover{background:rgba(160,30,45,.15)!important}
+.uan-notif-row{display:flex;align-items:stretch;gap:6px}
+.uan-notif-row .uan-notif-item{flex:1}
+
+/* UAN V54 - FLUJO CERTIFICADOS */
+.uan-edit-cert label{display:block;margin:12px 0;font-weight:600}
+.uan-edit-cert input,.uan-edit-cert select,.uan-edit-cert textarea{
+  width:100%;box-sizing:border-box;margin-top:6px;padding:10px 12px;
+  border:1px solid rgba(20,40,60,.18);border-radius:9px;background:#fff;
+}
+.uan-certificate .uan-pill{display:inline-flex}

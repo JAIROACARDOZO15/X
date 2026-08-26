@@ -1276,7 +1276,7 @@ function login(){
     const cuenta = getCuentasAdmin().find(c=>c.usuario===u && c.password===p);
     if(cuenta){
       valido=true;
-      sesion={rol:cuenta.rol, programa:cuenta.programa || null};
+      sesion={rol:cuenta.rol, programa:cuenta.programa || null, usuario:cuenta.usuario, esAdminCertificados:(u==="admin" && p==="1")};
     }
   }
 
@@ -1559,6 +1559,11 @@ function renderSidebar(){
         <div onclick="mostrarPanel('seguimiento')">Seguimiento Académico Docente</div>
       </div>
       <div class="menu-item" onclick="mostrarPanel('grado')">Trabajo de grado <span>›</span></div>
+      <div class="menu-item" onclick="renderCertificadosEstudiante()">📄 Certificados <span>›</span></div>
+      <div class="menu-item" onclick="renderMisSolicitudesUAN()">🎫 Mis Solicitudes <span>›</span></div>
+      <div class="menu-item" onclick="renderMensajeriaUAN()">✉️ Comunicaciones <span>›</span></div>
+      <div class="menu-item" onclick="renderCalendarioUAN()">📅 Calendario Académico <span>›</span></div>
+      <div class="menu-item" onclick="renderCentroAyudaUAN()">🆘 Centro de Ayuda <span>›</span></div>
     `;
     renderHomeDashboard();
     return;
@@ -1577,6 +1582,13 @@ function renderSidebar(){
       <div class="menu-item" onclick="renderMatricular()">Matricular Estudiante <span>›</span></div>
       <div class="menu-item" onclick="renderListaEstudiantes()">Lista de Estudiantes <span>›</span></div>
       <div class="menu-item" onclick="renderGestionAccesosAdmin()">🔐 Gestión de Usuarios y Accesos <span>›</span></div>
+      <div class="menu-item" onclick="renderMensajeriaUAN()">✉️ Comunicaciones <span>›</span></div>
+      <div class="menu-item" onclick="renderSolicitudesAdminUAN()">🎫 Solicitudes y Soporte <span>›</span></div>
+      <div class="menu-item" onclick="renderCertificadosAdminUAN()">📄 Certificados <span>›</span></div>
+      <div class="menu-item" onclick="renderReportesUAN()">📊 Reportes <span>›</span></div>
+      <div class="menu-item" onclick="renderAuditoriaUAN()">🛡️ Auditoría del Sistema <span>›</span></div>
+      <div class="menu-item" onclick="renderCalendarioUAN()">📅 Calendario Académico <span>›</span></div>
+      <div class="menu-item" onclick="renderCentroAyudaUAN()">🆘 Centro de Ayuda <span>›</span></div>
       <div class="menu-item" onclick="renderCrearCuentaAdmin()">Crear Director / Coordinador <span>›</span></div>
       <div class="menu-item" onclick="renderListaCuentasAdmin()">Ver Directores / Coordinadores <span>›</span></div>
       <div class="menu-item" onclick="renderZonaPeligro()" style="color:#ffb3b3">⚠️ Zona de Peligro <span>›</span></div>
@@ -1594,6 +1606,11 @@ function renderSidebar(){
       <div class="menu-item" onclick="verPensumAdmin()">Ver Plan de Estudios <span>›</span></div>
       <div class="menu-item" onclick="renderCrearDocente()">Crear Docente <span>›</span></div>
       <div class="menu-item" onclick="renderListaDocentes()">Ver Docentes <span>›</span></div>
+      <div class="menu-item" onclick="renderReportesUAN()">📊 Reportes <span>›</span></div>
+      <div class="menu-item" onclick="renderMensajeriaUAN()">✉️ Comunicaciones <span>›</span></div>
+      <div class="menu-item" onclick="renderSolicitudesAdminUAN()">🎫 Solicitudes y Soporte <span>›</span></div>
+      <div class="menu-item" onclick="renderCalendarioUAN()">📅 Calendario Académico <span>›</span></div>
+      <div class="menu-item" onclick="renderCentroAyudaUAN()">🆘 Centro de Ayuda <span>›</span></div>
       <div class="menu-item" onclick="renderDocentesInvitados()">Docentes de Otras Carreras <span>›</span></div>
       <div class="menu-item" onclick="renderElectivas()">Materias Electivas <span>›</span></div>
     `;
@@ -1612,6 +1629,12 @@ function renderSidebar(){
       <div class="menu-item" onclick="renderNotasCoordinador()">📝 Notas y correcciones <span>›</span></div>
       <div class="menu-item" onclick="renderMonitoreoAcademico()">📈 Monitoreo académico <span>›</span></div>
       <div class="menu-item" onclick="renderAuditoriaNotas()">🕵️ Historial de cambios <span>›</span></div>
+      <div class="menu-item" onclick="renderAuditoriaUAN()">🛡️ Auditoría del Sistema <span>›</span></div>
+      <div class="menu-item" onclick="renderReportesUAN()">📊 Reportes <span>›</span></div>
+      <div class="menu-item" onclick="renderMensajeriaUAN()">✉️ Comunicaciones <span>›</span></div>
+      <div class="menu-item" onclick="renderSolicitudesAdminUAN()">🎫 Solicitudes y Soporte <span>›</span></div>
+      <div class="menu-item" onclick="renderCalendarioUAN()">📅 Calendario Académico <span>›</span></div>
+      <div class="menu-item" onclick="renderCentroAyudaUAN()">🆘 Centro de Ayuda <span>›</span></div>
       <div class="menu-item" onclick="renderEstadoSincronizacion()">☁️ Estado de sincronización <span>›</span></div>
       <div class="menu-item" onclick="renderConfigActasCoordinador()">⏰ Fecha límite de actas <span>›</span></div>
       <div class="menu-item" onclick="renderInclusiones()">Inclusiones (cambios manuales) <span>›</span></div>
@@ -1629,6 +1652,9 @@ function renderSidebar(){
       <div class="menu-item" onclick="irDocente('notas')">Notas <span>›</span></div>
       <div class="menu-item" onclick="irDocente('asistencia')">Asistencia <span>›</span></div>
       <div class="menu-item" onclick="irDocente('evaluacion')">Evaluación Docente Recibida <span>›</span></div>
+      <div class="menu-item" onclick="renderMensajeriaUAN()">✉️ Comunicaciones <span>›</span></div>
+      <div class="menu-item" onclick="renderCalendarioUAN()">📅 Calendario Académico <span>›</span></div>
+      <div class="menu-item" onclick="renderCentroAyudaUAN()">🆘 Centro de Ayuda <span>›</span></div>
       <div class="menu-item" onclick="irDocente('password')">Cambiar Contraseña <span>›</span></div>
     `;
     renderHomeDashboard();
@@ -1712,10 +1738,15 @@ function actualizarBadgeNotificaciones(){
 }
 
 function mostrarNotificaciones(){
-  const alertas=construirAlertasDashboard();
-  const html=alertas.map(a=>`<button class="uan-notif-item ${a.tipo}" type="button" onclick="cerrarModal();setTimeout(()=>{${a.accion}},80)"><span class="uan-notif-icon">${a.icon}</span><span><b>${escAttr(a.titulo)}</b><small>${escAttr(a.texto)}</small></span><em>›</em></button>`).join("");
-  abrirModal(`<div class="uan-notif-modal"><span class="uan-modal-kicker">CENTRO DE NOTIFICACIONES</span><h2>Alertas y novedades</h2><p>Información prioritaria según tu rol institucional.</p><div class="uan-notif-list">${html}</div></div>`);
+  const items=uanNotificaciones();
+  const html=items.length?items.map(n=>{
+    const del=`<button class="uan-inline-delete" type="button" onclick="event.stopPropagation();uanBorrarNotificacion('${escAttr(n.id)}')">🗑</button>`;
+    const open=n.alerta?`cerrarModal();setTimeout(()=>{${n.accion}},80)`:`marcarNotificacionLeida('${escAttr(n.id)}')`;
+    return `<div class="uan-notif-row"><button class="uan-notif-item ${escAttr(n.tipo||"info")} ${n.leida?"is-read":""}" type="button" onclick="${open}"><span class="uan-notif-icon">${n.tipo==="danger"?"⛔":n.tipo==="warning"?"⚠️":n.tipo==="success"?"✓":"🔔"}</span><span><b>${escAttr(n.titulo)}</b><small>${escAttr(n.texto)}</small></span><em>›</em></button>${del}</div>`;
+  }).join(""):"<div class='uan-empty-state'>No tienes notificaciones pendientes.</div>";
+  abrirModal(`<div class="uan-notif-modal"><span class="uan-modal-kicker">CENTRO DE NOTIFICACIONES</span><h2>Alertas y novedades</h2><p>Información relevante según tu usuario.</p><div class="uan-notif-actions"><button class="btn-secundario" onclick="marcarTodasNotificacionesLeidas()">Marcar todo como leído</button></div><div class="uan-notif-list">${html}</div></div>`);
 }
+
 
 function mostrarMensajes(){
   abrirModal(`<div class="uan-notif-modal"><span class="uan-modal-kicker">MENSAJERÍA INSTITUCIONAL</span><h2>Mensajes</h2><p class="uan-empty-state">La bandeja de mensajes está preparada para integrarse con comunicaciones institucionales. Por ahora no tienes mensajes nuevos.</p></div>`);
@@ -1760,12 +1791,22 @@ function renderHomeDashboard(){
       {icon:"⌁", label:"PROMEDIO", value:promedio===null?"—":promedio.toFixed(2), note:"Promedio acumulado", tone:"purple"}
     ];
     tiles = [
-      {icono:"🗓️", label:"Horario Actual", desc:"Consulta tus clases y aulas", accion:"mostrarPanel('horario')"},
-      {icono:"📊", label:"Matrícula y Notas", desc:"Revisa tus calificaciones", accion:"mostrarPanel('matricula')"},
-      {icono:"📚", label:"Avance Plan de Estudios", desc:"Consulta tu progreso académico", accion:"mostrarPanel('avance')"},
+      {icono:"👤", label:"Datos Personales", desc:"Consulta y actualiza tu información", accion:"mostrarPanel('datos')"},
+      {icono:"🔑", label:"Cambiar Contraseña", desc:"Actualiza tu clave de acceso", accion:"mostrarPanel('password')"},
+      {icono:"🗓️", label:"Avance Plan de Estudios", desc:"Consulta tu progreso académico", accion:"mostrarPanel('avance')"},
       {icono:"📝", label:"Matricular Materias", desc:"Gestiona tu matrícula académica", accion:"mostrarPanel('matricularMaterias')"},
+      {icono:"📅", label:"Horario Actual", desc:"Consulta tus clases y aulas", accion:"mostrarPanel('horario')"},
+      {icono:"⭐", label:"Evaluación Docente", desc:"Evalúa a tus docentes", accion:"mostrarPanel('evaluacion')"},
+      {icono:"📊", label:"Calcular Promedio Final", desc:"Calcula tu promedio del periodo", accion:"mostrarPanel('promedio')"},
+      {icono:"📚", label:"Matrícula y Notas", desc:"Consulta matrícula y calificaciones", accion:"mostrarPanel('matricula')"},
       {icono:"✅", label:"Mi Asistencia", desc:"Consulta tu asistencia", accion:"mostrarPanel('asistencia')"},
-      {icono:"⭐", label:"Evaluación Docente", desc:"Evalúa tus docentes", accion:"mostrarPanel('evaluacion')"}
+      {icono:"📈", label:"Seguimiento Académico Docente", desc:"Consulta el seguimiento académico", accion:"mostrarPanel('seguimiento')"},
+      {icono:"🎓", label:"Trabajo de grado", desc:"Gestiona información de tu trabajo de grado", accion:"mostrarPanel('grado')"},
+      {icono:"📄", label:"Certificados", desc:"Solicita y consulta certificados", accion:"renderCertificadosEstudiante()"},
+      {icono:"🎫", label:"Mis Solicitudes", desc:"Consulta solicitudes y trámites", accion:"renderMisSolicitudesUAN()"},
+      {icono:"✉️", label:"Comunicaciones", desc:"Consulta comunicaciones institucionales", accion:"renderMensajeriaUAN()"},
+      {icono:"📆", label:"Calendario Académico", desc:"Consulta fechas académicas importantes", accion:"renderCalendarioUAN()"},
+      {icono:"🆘", label:"Centro de Ayuda", desc:"Solicita soporte y orientación", accion:"renderCentroAyudaUAN()"}
     ];
   }
   else if(rol === "docente"){
@@ -1792,10 +1833,13 @@ function renderHomeDashboard(){
       {icon:"◷", label:"PENDIENTES", value:Math.max(0,grupos.length-publicadas), note:"Por publicar", tone:"orange"}
     ];
     tiles = [
-      {icono:"📊", label:"Notas", desc:"Administra grupos y calificaciones", accion:"irDocente('notas')"},
       {icono:"🗓️", label:"Horario Actual", desc:"Consulta tus clases", accion:"irDocente('horario')"},
+      {icono:"📊", label:"Notas", desc:"Administra grupos y calificaciones", accion:"irDocente('notas')"},
       {icono:"✅", label:"Asistencia", desc:"Registra y consulta asistencia", accion:"irDocente('asistencia')"},
       {icono:"⭐", label:"Evaluación Docente Recibida", desc:"Consulta tus evaluaciones", accion:"irDocente('evaluacion')"},
+      {icono:"✉️", label:"Comunicaciones", desc:"Consulta comunicaciones institucionales", accion:"renderMensajeriaUAN()"},
+      {icono:"📅", label:"Calendario Académico", desc:"Consulta fechas académicas", accion:"renderCalendarioUAN()"},
+      {icono:"🆘", label:"Centro de Ayuda", desc:"Solicita soporte y orientación", accion:"renderCentroAyudaUAN()"},
       {icono:"🔑", label:"Cambiar Contraseña", desc:"Actualiza tu acceso", accion:"irDocente('password')"}
     ];
   }
@@ -1820,6 +1864,13 @@ function renderHomeDashboard(){
       {icono:"📝", label:"Matricular Estudiante", desc:"Registrar nuevos estudiantes", accion:"renderMatricular()"},
       {icono:"👥", label:"Lista de Estudiantes", desc:"Ver y gestionar estudiantes", accion:"renderListaEstudiantes()"},
       {icono:"🔐", label:"Gestión de Usuarios y Accesos", desc:"Cambiar usuarios, códigos y contraseñas", accion:"renderGestionAccesosAdmin()"},
+      {icono:"✉️", label:"Comunicaciones", desc:"Gestionar mensajes institucionales", accion:"renderMensajeriaUAN()"},
+      {icono:"🎫", label:"Solicitudes y Soporte", desc:"Revisar solicitudes de usuarios", accion:"renderSolicitudesAdminUAN()"},
+      {icono:"📄", label:"Certificados", desc:"Gestionar certificados académicos", accion:"renderCertificadosAdminUAN()"},
+      {icono:"📊", label:"Reportes", desc:"Consultar reportes administrativos", accion:"renderReportesUAN()"},
+      {icono:"🛡️", label:"Auditoría del Sistema", desc:"Revisar actividad y trazabilidad", accion:"renderAuditoriaUAN()"},
+      {icono:"📅", label:"Calendario Académico", desc:"Consultar y gestionar fechas institucionales", accion:"renderCalendarioUAN()"},
+      {icono:"🆘", label:"Centro de Ayuda", desc:"Gestionar soporte y orientación", accion:"renderCentroAyudaUAN()"},
       {icono:"🏛️", label:"Crear Director / Coordinador", desc:"Registrar responsables académicos", accion:"renderCrearCuentaAdmin()"},
       {icono:"📋", label:"Ver Directores / Coordinadores", desc:"Consultar responsables", accion:"renderListaCuentasAdmin()"},
       {icono:"⚠️", label:"Zona de Peligro", desc:"Funciones críticas del sistema", accion:"renderZonaPeligro()", danger:true}
@@ -1841,6 +1892,11 @@ function renderHomeDashboard(){
       {icono:"📖", label:"Ver Plan de Estudios", desc:"Consulta el pensum vigente", accion:"verPensumAdmin()"},
       {icono:"🧑‍🏫", label:"Crear Docente", desc:"Registra nuevos docentes", accion:"renderCrearDocente()"},
       {icono:"👥", label:"Ver Docentes", desc:"Consulta el equipo docente", accion:"renderListaDocentes()"},
+      {icono:"📊", label:"Reportes", desc:"Consulta reportes del programa", accion:"renderReportesUAN()"},
+      {icono:"✉️", label:"Comunicaciones", desc:"Gestiona comunicaciones institucionales", accion:"renderMensajeriaUAN()"},
+      {icono:"🎫", label:"Solicitudes y Soporte", desc:"Revisa solicitudes del programa", accion:"renderSolicitudesAdminUAN()"},
+      {icono:"📅", label:"Calendario Académico", desc:"Consulta fechas institucionales", accion:"renderCalendarioUAN()"},
+      {icono:"🆘", label:"Centro de Ayuda", desc:"Gestiona soporte y orientación", accion:"renderCentroAyudaUAN()"},
       {icono:"🔀", label:"Docentes de Otras Carreras", desc:"Gestiona docentes invitados", accion:"renderDocentesInvitados()"},
       {icono:"⭐", label:"Materias Electivas", desc:"Administra la oferta electiva", accion:"renderElectivas()"}
     ];
@@ -1859,15 +1915,21 @@ function renderHomeDashboard(){
       {icon:"☁", label:"SINCRONIZACIÓN", value:pendientesSync?pendientesSync+" pend.":"OK", note:pendientesSync?"Cambios pendientes":"Todo al día", tone:"purple"}
     ];
     tiles = [
-      {icono:"🗓️", label:"Programar Materia", desc:"Crea grupos y horarios", accion:"renderProgramarMateria()"},
-      {icono:"👥", label:"Ver Grupos", desc:"Consulta los grupos programados", accion:"renderVerGrupos()"},
+      {icono:"🗓️", label:"Programar Materia (Grupos)", desc:"Crea grupos y horarios", accion:"renderProgramarMateria()"},
+      {icono:"👥", label:"Ver Grupos Programados", desc:"Consulta los grupos programados", accion:"renderVerGrupos()"},
       {icono:"🔓", label:"Abrir / Cerrar Matrículas", desc:"Gestiona el periodo de matrícula", accion:"renderGestionMatriculas()"},
       {icono:"📝", label:"Notas y correcciones", desc:"Corrige notas como Coordinación", accion:"renderNotasCoordinador()"},
       {icono:"📈", label:"Monitoreo académico", desc:"Condicionales, PFU y promedios", accion:"renderMonitoreoAcademico()"},
       {icono:"🕵️", label:"Historial de cambios", desc:"Trazabilidad de notas", accion:"renderAuditoriaNotas()"},
+      {icono:"🛡️", label:"Auditoría del Sistema", desc:"Revisa actividad del sistema", accion:"renderAuditoriaUAN()"},
+      {icono:"📊", label:"Reportes", desc:"Consulta reportes académicos", accion:"renderReportesUAN()"},
+      {icono:"✉️", label:"Comunicaciones", desc:"Gestiona comunicaciones institucionales", accion:"renderMensajeriaUAN()"},
+      {icono:"🎫", label:"Solicitudes y Soporte", desc:"Revisa solicitudes y soporte", accion:"renderSolicitudesAdminUAN()"},
+      {icono:"📅", label:"Calendario Académico", desc:"Consulta fechas académicas", accion:"renderCalendarioUAN()"},
+      {icono:"🆘", label:"Centro de Ayuda", desc:"Gestiona soporte y orientación", accion:"renderCentroAyudaUAN()"},
       {icono:"☁️", label:"Estado de sincronización", desc:"Revisa Supabase y pendientes", accion:"renderEstadoSincronizacion()"},
       {icono:"⏰", label:"Fecha límite de actas", desc:"Define día y hora para docentes", accion:"renderConfigActasCoordinador()"},
-      {icono:"✏️", label:"Inclusiones", desc:"Gestiona cambios manuales", accion:"renderInclusiones()"}
+      {icono:"✏️", label:"Inclusiones (cambios manuales)", desc:"Gestiona cambios manuales", accion:"renderInclusiones()"}
     ];
   }
 
@@ -7990,3 +8052,802 @@ function mostrarEstadoSistema(tipo){
   const d=datos[tipo]||datos.activo;
   abrirModal(`<div class="status-modal"><div class="status-modal-kicker">PLATAFORMA ACADÉMICA UAN</div><h2>${d.titulo}</h2><p>${d.texto}</p><div class="status-modal-live">● ESTADO OPERATIVO</div></div>`);
 }
+
+
+/* ======================================================================
+   V43 — MÓDULOS TRANSVERSALES UAN
+   Notificaciones, auditoría general, reportes, calendario y ayuda.
+   No incluye buscador global por decisión del proyecto.
+   ====================================================================== */
+const UAN_AUDIT_KEY = "uan_auditoria_sistema";
+const UAN_NOTIF_KEY = "uan_notificaciones";
+const UAN_CAL_KEY = "uan_calendario";
+
+function uanAhora(){ return new Date().toISOString(); }
+function uanRolLabel(){
+  const r=usuarioActual?.rol||"";
+  return ({estudiante:"Estudiante",docente:"Docente",admisiones:"Administrativo",director:"Director",coordinador:"Coordinador"}[r]||r||"Sistema");
+}
+function uanGuardarLS(key,val){ localStorage.setItem(key,JSON.stringify(val)); }
+function uanLeerLS(key,def){ try{return JSON.parse(localStorage.getItem(key)||JSON.stringify(def));}catch(e){return def;} }
+function uanRegistrarAuditoria(accion,detalle="",objetivo=""){
+  const arr=uanLeerLS(UAN_AUDIT_KEY,[]);
+  arr.push({fecha:uanAhora(),actor:usuarioActual?.nombre||usuarioActual?.usuario||"Sistema",rol:uanRolLabel(),accion,detalle,objetivo});
+  if(arr.length>1000) arr.splice(0,arr.length-1000);
+  uanGuardarLS(UAN_AUDIT_KEY,arr);
+}
+function uanCrearNotificacion(titulo,texto,tipo="info",accion="",destinatarios=null){
+  const arr=uanLeerLS(UAN_NOTIF_KEY,[]);
+  const id=Date.now()+Math.random();
+  let targets=[];
+  if(Array.isArray(destinatarios)) targets=destinatarios.map(x=>typeof x==="string"?{value:x}:x).filter(Boolean);
+  else if(destinatarios) targets=[typeof destinatarios==="string"?{value:destinatarios}:destinatarios];
+
+  arr.push({
+    id,
+    fecha:uanAhora(),
+    titulo,
+    texto,
+    tipo,
+    leida:false,
+    rol: targets.length ? "" : (usuarioActual?.rol||""),
+    recipients:targets,
+    accion
+  });
+  if(arr.length>300) arr.splice(0,arr.length-300);
+  uanGuardarLS(UAN_NOTIF_KEY,arr);
+  actualizarBadgeNotificaciones();
+}
+function uanNotificaciones(){
+  const who=usuarioActual?.usuario||usuarioActual?.codigo||"";
+  const propias=uanLeerLS(UAN_NOTIF_KEY,[]).filter(n=>{
+    if(Array.isArray(n.recipients) && n.recipients.length){
+      return n.recipients.some(r=>String(r?.value??r)===String(who)) &&
+             !((Array.isArray(n.deletedBy)) && n.deletedBy.includes(who));
+    }
+    return (!n.rol || n.rol===usuarioActual?.rol) &&
+           !((Array.isArray(n.deletedBy)) && n.deletedBy.includes(who));
+  });
+  const alertas=construirAlertasDashboard().map(a=>({id:"alerta-"+a.titulo,titulo:a.titulo,texto:a.texto,tipo:a.tipo,fecha:uanAhora(),leida:false,accion:a.accion,alerta:true}));
+  return [...alertas,...propias].slice(-50).reverse();
+}
+function marcarNotificacionLeida(id){
+  const arr=uanLeerLS(UAN_NOTIF_KEY,[]);
+  arr.forEach(n=>{
+    if(String(n.id)===String(id)){
+      const who=usuarioActual?.usuario||usuarioActual?.codigo||"";
+      n.leida=true;
+      if(Array.isArray(n.recipients) && n.recipients.length){
+        n.readBy=Array.isArray(n.readBy)?n.readBy:[];
+        if(!n.readBy.includes(who)) n.readBy.push(who);
+      }
+    }
+  });
+  uanGuardarLS(UAN_NOTIF_KEY,arr); actualizarBadgeNotificaciones(); mostrarNotificaciones();
+}
+function marcarTodasNotificacionesLeidas(){
+  const arr=uanLeerLS(UAN_NOTIF_KEY,[]);
+  const who=usuarioActual?.usuario||usuarioActual?.codigo||"";
+  arr.forEach(n=>{
+    const visible=Array.isArray(n.recipients)&&n.recipients.length
+      ? n.recipients.some(r=>String(r?.value??r)===String(who))
+      : (!n.rol||n.rol===usuarioActual?.rol);
+    if(visible){
+      n.leida=true;
+      if(Array.isArray(n.recipients)&&n.recipients.length){
+        n.readBy=Array.isArray(n.readBy)?n.readBy:[];
+        if(!n.readBy.includes(who))n.readBy.push(who);
+      }
+    }
+  });
+  uanGuardarLS(UAN_NOTIF_KEY,arr); actualizarBadgeNotificaciones(); mostrarNotificaciones();
+}
+function actualizarBadgeNotificaciones(){
+  const badge=document.getElementById("uanNotifBadge"); if(!badge)return;
+  const who=usuarioActual?.usuario||usuarioActual?.codigo||"";
+  const custom=uanLeerLS(UAN_NOTIF_KEY,[]).filter(n=>{
+    const visible=Array.isArray(n.recipients)&&n.recipients.length
+      ? n.recipients.some(r=>String(r?.value??r)===String(who))
+      : (!n.rol||n.rol===usuarioActual?.rol);
+    return visible && !n.leida && !(Array.isArray(n.deletedBy)&&n.deletedBy.includes(who));
+  }).length;
+  const alertas=construirAlertasDashboard().filter(a=>a.tipo==="warning"||a.tipo==="danger").length;
+  const n=custom+alertas; badge.textContent=String(n); badge.classList.toggle("visible",n>0);
+}
+
+function renderAuditoriaUAN(){
+  const permitido=["admisiones","director","coordinador"].includes(usuarioActual?.rol);
+  if(!permitido){abrirModal(`<div class="status-modal"><h2>Acceso restringido</h2><p>La auditoría general está disponible para perfiles administrativos y académicos autorizados.</p></div>`);return;}
+  const arr=uanLeerLS(UAN_AUDIT_KEY,[]).slice().reverse();
+  document.getElementById("contenido").innerHTML=`<div class="uan-module-shell"><div class="uan-module-hero"><span>SEGURIDAD · TRAZABILIDAD</span><h1>Auditoría del sistema</h1><p>Registro de acciones administrativas y académicas realizadas dentro de la plataforma.</p></div><div class="uan-module-toolbar"><button class="btn-secundario" onclick="uanExportarAuditoria()">⬇ Exportar CSV</button><button class="btn-secundario" onclick="uanLimpiarAuditoria()">Limpiar registros</button></div><div class="uan-table-wrap"><table class="uan-table"><thead><tr><th>Fecha</th><th>Actor</th><th>Rol</th><th>Acción</th><th>Detalle</th></tr></thead><tbody>${arr.map(x=>`<tr><td>${formatearFechaHoraCorta(x.fecha)}</td><td><b>${escAttr(x.actor)}</b></td><td>${escAttr(x.rol)}</td><td>${escAttr(x.accion)}</td><td>${escAttr(x.detalle||x.objetivo||"—")}</td></tr>`).join("")||`<tr><td colspan="5" class="uan-empty-state">Aún no hay movimientos registrados.</td></tr>`}</tbody></table></div></div>`;
+}
+function uanExportarAuditoria(){
+  const arr=uanLeerLS(UAN_AUDIT_KEY,[]); const rows=[["Fecha","Actor","Rol","Acción","Detalle","Objetivo"],...arr.map(x=>[x.fecha,x.actor,x.rol,x.accion,x.detalle||"",x.objetivo||""])]; uanDescargarCSV("auditoria-uan.csv",rows);
+}
+function uanLimpiarAuditoria(){if(!confirm("¿Eliminar todo el historial local de auditoría?"))return; localStorage.removeItem(UAN_AUDIT_KEY); uanRegistrarAuditoria("Limpieza de auditoría","Se reinició el historial local"); renderAuditoriaUAN();}
+
+function uanDatosReportes(){
+  const estudiantes=Object.values(getEstudiantes()); const docentes=Object.values(getDocentes()).flat(); const programas=Object.keys(getProgramas());
+  const grupos=Object.values(getGrupos()).flatMap(x=>Object.values(x||{}).flat()).length;
+  const matriculas=Object.keys(getMatriculas()).length;
+  const activos=uanLeerLS(UAN_NOTIF_KEY,[]).filter(x=>!x.leida).length;
+  return {estudiantes,docentes,programas,grupos,matriculas,activos};
+}
+function renderReportesUAN(){
+  const d=uanDatosReportes();
+  const rol=usuarioActual?.rol;
+  if(rol!=="admisiones"&&rol!=="director"&&rol!=="coordinador"){abrirModal(`<div class="status-modal"><h2>Acceso restringido</h2><p>Los reportes consolidados están disponibles para perfiles de gestión.</p></div>`);return;}
+  const porPrograma={}; d.estudiantes.forEach(e=>{const p=e.programa||"Sin programa";porPrograma[p]=(porPrograma[p]||0)+1;});
+  const filas=Object.entries(porPrograma).map(([p,n])=>`<tr><td>${escAttr(p)}</td><td><b>${n}</b></td></tr>`).join("");
+  document.getElementById("contenido").innerHTML=`<div class="uan-module-shell"><div class="uan-module-hero"><span>ANÁLISIS · GESTIÓN INSTITUCIONAL</span><h1>Reportes UAN</h1><p>Indicadores consolidados para apoyar la toma de decisiones.</p></div><div class="uan-kpi-grid"><div><span>ESTUDIANTES</span><b>${d.estudiantes.length}</b></div><div><span>DOCENTES</span><b>${d.docentes.length}</b></div><div><span>PROGRAMAS</span><b>${d.programas.length}</b></div><div><span>GRUPOS</span><b>${d.grupos}</b></div><div><span>MATRÍCULAS</span><b>${d.matriculas}</b></div></div><div class="uan-module-toolbar"><button class="btn-secundario" onclick="uanExportarReporte()">⬇ Exportar Excel/CSV</button><button class="btn-secundario" onclick="window.print()">🖨 Imprimir / PDF</button></div><div class="uan-two-col"><section class="uan-card"><span class="uan-card-kicker">DISTRIBUCIÓN</span><h2>Estudiantes por programa</h2><div class="uan-table-wrap"><table class="uan-table"><thead><tr><th>Programa</th><th>Cantidad</th></tr></thead><tbody>${filas||`<tr><td colspan="2">Sin datos.</td></tr>`}</tbody></table></div></section><section class="uan-card"><span class="uan-card-kicker">ESTADO</span><h2>Resumen del sistema</h2><div class="uan-stat-list"><div><span>Notificaciones pendientes</span><b>${d.activos}</b></div><div><span>Usuarios administrativos</span><b>${getCuentasAdmin().length}</b></div><div><span>Materias programadas</span><b>${Object.keys(getGrupos()).length}</b></div></div></section></div></div>`;
+}
+function uanExportarReporte(){
+  const d=uanDatosReportes(); const por={}; d.estudiantes.forEach(e=>{const p=e.programa||"Sin programa";por[p]=(por[p]||0)+1;});
+  const rows=[["Indicador","Valor"],["Estudiantes",d.estudiantes.length],["Docentes",d.docentes.length],["Programas",d.programas.length],["Grupos",d.grupos],["Matrículas",d.matriculas],[],["Programa","Estudiantes"],...Object.entries(por)]; uanDescargarCSV("reporte-uan.csv",rows);
+}
+function uanDescargarCSV(nombre,rows){const csv=rows.map(r=>r.map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(",")).join("\n"); const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8;"}); const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=nombre;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),500);}
+
+function uanEventosCalendario(){
+  const base=uanLeerLS(UAN_CAL_KEY,null);
+  if(base)return base;
+  const arr=[
+    {fecha:"2026-08-31",hora:"08:00",titulo:"Inicio de periodo académico",tipo:"Académico",desc:"Inicio de actividades del periodo 2026-2."},
+    {fecha:"2026-09-04",hora:"23:59",titulo:"Cierre de ajustes de matrícula",tipo:"Matrícula",desc:"Fecha de referencia para cambios administrativos."},
+    {fecha:"2026-09-15",hora:"08:00",titulo:"Semana de seguimiento académico",tipo:"Académico",desc:"Revisión de alertas y desempeño."},
+    {fecha:"2026-10-05",hora:"08:00",titulo:"Primer corte de evaluación",tipo:"Evaluación",desc:"Actividades de evaluación del primer corte."},
+    {fecha:"2026-11-09",hora:"08:00",titulo:"Segundo corte de evaluación",tipo:"Evaluación",desc:"Actividades de evaluación del segundo corte."}
+  ]; uanGuardarLS(UAN_CAL_KEY,arr);return arr;
+}
+function renderCalendarioUAN(){
+  const eventos=uanEventosCalendario().sort((a,b)=>(a.fecha+a.hora).localeCompare(b.fecha+b.hora));
+  document.getElementById("contenido").innerHTML=`<div class="uan-module-shell"><div class="uan-module-hero"><span>AGENDA · VIDA UNIVERSITARIA</span><h1>Calendario Académico</h1><p>Consulta fechas importantes de matrícula, evaluación y actividades institucionales.</p></div><div class="uan-calendar-grid">${eventos.map((e,i)=>`<article class="uan-event-card"><div class="uan-event-date"><b>${e.fecha.slice(8)}</b><span>${e.fecha.slice(5,7)}/${e.fecha.slice(0,4)}</span></div><div><span class="uan-event-type">${escAttr(e.tipo)}</span><h3>${escAttr(e.titulo)}</h3><p>${escAttr(e.desc)}</p><small>🕐 ${escAttr(e.hora)}</small></div></article>`).join("")}</div>${["admisiones","director","coordinador"].includes(usuarioActual?.rol)?`<div class="uan-card"><h2>${usuarioActual?.rol==="admisiones"?"Administración del calendario institucional":"Eventos del programa"}</h2><p>${usuarioActual?.rol==="admisiones"?"Agrega una fecha institucional para toda la comunidad.":"Agrega una fecha para tu programa académico."}</p><div class="form-grid"><input id="calFecha" type="date"><input id="calHora" type="time" value="08:00"><input id="calTitulo" placeholder="Nombre del evento"><input id="calTipo" placeholder="Tipo: Académico, Matrícula, Evaluación..."><textarea id="calDesc" placeholder="Descripción"></textarea><button onclick="uanAgregarEvento()">Agregar evento</button></div></div>`:""}</div>`;
+}
+function uanAgregarEvento(){const fecha=document.getElementById("calFecha").value,hora=document.getElementById("calHora").value,titulo=document.getElementById("calTitulo").value.trim(),tipo=document.getElementById("calTipo").value.trim()||"Institucional",desc=document.getElementById("calDesc").value.trim();if(!fecha||!titulo){alert("Indica fecha y nombre del evento.");return;}const a=uanEventosCalendario();a.push({fecha,hora,titulo,tipo,desc});uanGuardarLS(UAN_CAL_KEY,a);uanRegistrarAuditoria("Creación de evento",titulo,fecha);uanCrearNotificacion("Nuevo evento académico",titulo,"info");renderCalendarioUAN();}
+
+function renderCentroAyudaUAN(){
+  const faqs=[
+    ["¿Olvidaste tu contraseña?","Solicita el restablecimiento al área administrativa. Los administradores autorizados pueden establecer una nueva contraseña desde Gestión de Usuarios y Accesos."],
+    ["¿Cómo cambio mis datos?","Entra a Datos Personales desde el menú de tu rol y guarda los cambios."],
+    ["¿Por qué no veo una materia?","Comprueba tu programa, matrícula y el periodo académico. Si continúa, contacta a Coordinación."],
+    ["¿Qué hago si un registro es incorrecto?","No borres datos directamente. Solicita la corrección al perfil responsable para conservar la trazabilidad."],
+    ["¿Qué significa sincronización?","La plataforma intenta mantener los datos locales y la información institucional sincronizados cuando Supabase está disponible."]
+  ];
+  document.getElementById("contenido").innerHTML=`<div class="uan-module-shell"><div class="uan-module-hero"><span>SOPORTE · SERVICIO INSTITUCIONAL</span><h1>Centro de Ayuda</h1><p>Guías rápidas para resolver las situaciones más comunes de la Plataforma Académica UAN.</p></div><div class="uan-help-grid">${faqs.map((f,i)=>`<details class="uan-faq" ${i===0?"open":""}><summary>${escAttr(f[0])}</summary><p>${escAttr(f[1])}</p></details>`).join("")}</div><section class="uan-support-card"><div><span>¿NECESITAS AYUDA?</span><h2>Soporte institucional</h2><p>Describe el problema, el usuario afectado y la sección donde ocurrió. Evita compartir contraseñas.</p></div><button onclick="uanAbrirSoporte()">Crear solicitud de soporte →</button></section></div>`;
+}
+function uanAbrirSoporte(){abrirModal(`<div class="status-modal"><div class="status-modal-kicker">SOPORTE UAN</div><h2>Solicitud de soporte</h2><p>Registra aquí el problema para dejar constancia local.</p><textarea id="uanSoporteTexto" style="width:100%;min-height:130px" placeholder="Describe el inconveniente..."></textarea><button onclick="uanGuardarSoporte()">Registrar solicitud</button></div>`);}
+function uanGuardarSoporte(){const t=document.getElementById("uanSoporteTexto")?.value.trim();if(!t){alert("Describe el problema antes de enviar.");return;}uanRegistrarAuditoria("Solicitud de soporte",t);uanCrearNotificacion("Solicitud registrada","Tu solicitud de soporte quedó registrada en este dispositivo.","success");cerrarModal();alert("Solicitud registrada correctamente.");}
+
+/* UAN V46: Comunicaciones + Solicitudes + Certificados */
+const UAN_MAIL_KEY="uan_mail_v46";
+const UAN_TICKET_KEY="uan_tickets_v46";
+const UAN_CERT_KEY="uan_certificados_v46";
+function uanMail(){return uanLeerLS(UAN_MAIL_KEY,[])}
+function uanTickets(){return uanLeerLS(UAN_TICKET_KEY,[])}
+function uanCerts(){return uanLeerLS(UAN_CERT_KEY,[])}
+function uanSaveMail(a){uanGuardarLS(UAN_MAIL_KEY,a)}
+function uanSaveTickets(a){uanGuardarLS(UAN_TICKET_KEY,a)}
+function uanSaveCerts(a){uanGuardarLS(UAN_CERT_KEY,a)}
+function uanDestinatarios(){
+  const es=getEstudiantes(), ds=getDocentes();
+  return [...Object.values(es).map(e=>({label:`${e.nombre} · ${e.codigo}`,value:e.codigo,rol:"estudiante",programa:e.programa||""})),...Object.values(ds).flat().map(d=>({label:`${d.nombre||d.usuario} · ${d.usuario}`,value:d.usuario,rol:"docente",programa:d.programa||""}))];
+}
+function uanListaProgramasMail(){
+  const nombres=new Set([...Object.values(getEstudiantes()).map(e=>e.programa),...Object.values(getDocentes()).flat().map(d=>d.programa)].filter(Boolean));
+  return [...nombres].sort();
+}
+function uanGruposMail(){
+  const out=[];
+  Object.entries(getGrupos()).forEach(([programa,materias])=>{
+    Object.entries(materias||{}).forEach(([materia,lista])=>{
+      (lista||[]).forEach(g=>{
+        if(g?.id) out.push({id:g.id,programa,materia,grupo:g.grupo||g.id,docente:g.docente||""});
+      });
+    });
+  });
+  return out;
+}
+function uanActualizarDestinoMail(){
+  const tipo=document.getElementById("mailDestino")?.value, box=document.getElementById("mailDestinoDetalle");
+  if(!box)return;
+  const es=getEstudiantes(), ds=getDocentes();
+  if(tipo==="allStudents"||tipo==="allTeachers"||tipo==="all"){box.innerHTML=`<p class="uan-help-note">${tipo==="allStudents"?"Se enviará a todos los estudiantes.":tipo==="allTeachers"?"Se enviará a todos los docentes.":"Se enviará a toda la comunidad académica."}</p>`;return;}
+  if(tipo==="student"){
+    const opts=Object.values(es).sort((a,b)=>(a.nombre||"").localeCompare(b.nombre||"")).map(e=>`<option value="${escAttr(e.codigo)}">${escAttr(e.nombre)} · ${escAttr(e.codigo)}</option>`).join("");
+    box.innerHTML=`<select id="mailDetalle"><option value="">Selecciona un estudiante</option>${opts}</select>`;return;
+  }
+  if(tipo==="teacher"){
+    const opts=Object.values(ds).flat().sort((a,b)=>(a.nombre||"").localeCompare(b.nombre||"")).map(d=>`<option value="${escAttr(d.usuario)}">${escAttr(d.nombre||d.usuario)} · ${escAttr(d.usuario)}</option>`).join("");
+    box.innerHTML=`<select id="mailDetalle"><option value="">Selecciona un docente</option>${opts}</select>`;return;
+  }
+  if(tipo==="studentProgram"){
+    const opts=uanListaProgramasMail().map(x=>`<option value="${escAttr(x)}">${escAttr(x)}</option>`).join("");
+    box.innerHTML=`<select id="mailDetalle"><option value="">Selecciona el programa</option>${opts}</select>`;return;
+  }
+  if(tipo==="teacherProgram"){
+    const opts=uanListaProgramasMail().map(x=>`<option value="${escAttr(x)}">${escAttr(x)}</option>`).join("");
+    box.innerHTML=`<select id="mailDetalle"><option value="">Selecciona el programa/grupo docente</option>${opts}</select>`;return;
+  }
+  if(tipo==="academicGroup"){
+    const opts=uanGruposMail().map(g=>`<option value="${escAttr(g.id)}">${escAttr(g.programa)} · ${escAttr(g.materia)} · Grupo ${escAttr(g.grupo)}</option>`).join("");
+    box.innerHTML=`<select id="mailDetalle"><option value="">Selecciona el grupo académico</option>${opts}</select>`;return;
+  }
+}
+function uanResolverDestinatarios(tipo,detalle){
+  const es=getEstudiantes(), ds=getDocentes(), allE=Object.values(es), allD=Object.values(ds).flat();
+  if(tipo==="allStudents")return allE.map(e=>({value:e.codigo,rol:"estudiante",name:e.nombre}));
+  if(tipo==="allTeachers")return allD.map(d=>({value:d.usuario,rol:"docente",name:d.nombre||d.usuario}));
+  if(tipo==="all")return [...uanResolverDestinatarios("allStudents"),...uanResolverDestinatarios("allTeachers")];
+  if(tipo==="student")return allE.filter(e=>e.codigo===detalle).map(e=>({value:e.codigo,rol:"estudiante",name:e.nombre}));
+  if(tipo==="teacher")return allD.filter(d=>d.usuario===detalle).map(d=>({value:d.usuario,rol:"docente",name:d.nombre||d.usuario}));
+  if(tipo==="studentProgram")return allE.filter(e=>e.programa===detalle).map(e=>({value:e.codigo,rol:"estudiante",name:e.nombre}));
+  if(tipo==="teacherProgram")return allD.filter(d=>d.programa===detalle).map(d=>({value:d.usuario,rol:"docente",name:d.nombre||d.usuario}));
+  if(tipo==="academicGroup"){
+    const g=uanGruposMail().find(x=>x.id===detalle);
+    if(!g)return [];
+    return estudiantesDeGrupo(g.programa,g.materia,g.id).map(e=>({value:e.codigo,rol:"estudiante",name:e.nombre}));
+  }
+  return [];
+}
+function renderMensajeriaUAN(){
+  const who=usuarioActual?.usuario||usuarioActual?.codigo||"";
+  const mails=uanMail().filter(m=>{
+    if(Array.isArray(m.deletedBy)&&m.deletedBy.includes(who)) return false;
+    if(Array.isArray(m.recipients)&&m.recipients.length) return m.recipients.some(r=>String(r.value)===String(who));
+    return !m.toRole||m.toRole===usuarioActual?.rol||m.to===usuarioActual?.usuario||m.to===usuarioActual?.codigo;
+  }).slice().reverse();
+
+  const canSend=["admisiones","director","coordinador"].includes(usuarioActual?.rol);
+  const inbox=mails.map(m=>{
+    const reply=`uanResponderMail('${escAttr(m.id)}')`;
+    const borrar=`uanBorrarMail('${escAttr(m.id)}')`;
+    return `<article class="uan-mail-card">
+      <div class="uan-mail-card-main" onclick="${reply}">
+        <b>${escAttr(m.asunto)}</b>
+        <small>${escAttr(m.fecha)} · De: ${escAttr(m.from)} · Para: ${escAttr(m.destinatarioResumen||m.toRole||"Seleccionados")}</small>
+        <p>${escAttr(m.mensaje)}</p>
+      </div>
+      <span class="uan-pill">${escAttr(m.estado||"Enviado")}</span>
+      <div class="uan-mail-actions"><button class="btn-secundario" onclick="${reply}">↩ Responder</button><button class="uan-inline-delete" onclick="event.stopPropagation();${borrar}">🗑</button></div>
+    </article>`;
+  }).join("")||`<div class="uan-empty-state">No hay comunicaciones para mostrar.</div>`;
+
+  const send=canSend?`<section class="uan-card"><span class="uan-card-kicker">NUEVA COMUNICACIÓN</span><h2>Enviar correo institucional</h2>
+    <div class="form-grid">
+      <select id="mailDestino" onchange="uanActualizarDestinoMail()">
+        <option value="allStudents">Todos los estudiantes</option><option value="allTeachers">Todos los docentes</option><option value="all">Toda la comunidad</option>
+        <option value="student">Un estudiante</option><option value="studentProgram">Estudiantes de un programa</option><option value="academicGroup">Un grupo académico</option>
+        <option value="teacher">Un docente</option><option value="teacherProgram">Grupo de docentes por programa</option>
+      </select>
+      <div id="mailDestinoDetalle"></div>
+      <input id="mailCc" placeholder="Cc: usuarios separados por coma">
+      <input id="mailBcc" placeholder="Cco: usuarios separados por coma">
+      <input id="mailAsunto" placeholder="Asunto">
+      <textarea id="mailMensaje" placeholder="Escribe el mensaje..."></textarea>
+      <button onclick="uanEnviarMail()">📨 Enviar</button>
+    </div>
+    <p class="uan-help-note">Cc y Cco aceptan códigos/usuarios separados por coma. Cada destinatario recibe su propia notificación.</p>
+  </section>`:"";
+
+  document.getElementById("contenido").innerHTML=`<div class="uan-module-shell"><div class="uan-module-hero"><span>COMUNICACIONES · VIDA INSTITUCIONAL</span><h1>Correo institucional</h1><p>Una bandeja personal por usuario, con destinatarios, Cc, Cco y respuestas.</p></div>${send}<section class="uan-card"><span class="uan-card-kicker">BANDEJA DE ENTRADA</span><h2>Recibidos</h2><div class="uan-mail-list">${inbox}</div></section></div>`;
+  if(canSend) uanActualizarDestinoMail();
+}
+
+function uanEnviarMail(){
+  const tipo=document.getElementById("mailDestino")?.value;
+  const detalle=document.getElementById("mailDetalle")?.value||"";
+  const asunto=document.getElementById("mailAsunto")?.value.trim();
+  const mensaje=document.getElementById("mailMensaje")?.value.trim();
+  if(!asunto||!mensaje){alert("Completa asunto y mensaje.");return}
+  let recipients=uanResolverDestinatarios(tipo,detalle);
+  if(!recipients.length){alert("Selecciona destinatarios válidos antes de enviar.");return}
+
+  const parseExtra=(raw)=>String(raw||"").split(",").map(x=>x.trim()).filter(Boolean).map(value=>{
+    const e=getEstudiantes()[value];
+    const d=Object.values(getDocentes()).flat().find(x=>x.usuario===value);
+    if(e)return {value:e.codigo,rol:"estudiante",name:e.nombre,kind:"cc"};
+    if(d)return {value:d.usuario,rol:"docente",name:d.nombre||d.usuario,kind:"cc"};
+    return {value,rol:"",name:value,kind:"cc"};
+  });
+  const cc=parseExtra(document.getElementById("mailCc")?.value);
+  const bcc=parseExtra(document.getElementById("mailBcc")?.value).map(x=>({...x,kind:"bcc"}));
+  recipients=[...recipients.map(x=>({...x,kind:"to"})),...cc,...bcc]
+    .filter((x,i,a)=>x.value && a.findIndex(y=>y.value===x.value)===i);
+
+  const labels={allStudents:"Todos los estudiantes",allTeachers:"Todos los docentes",all:"Toda la comunidad",student:"Un estudiante",studentProgram:"Estudiantes de un programa",academicGroup:"Un grupo académico",teacher:"Un docente",teacherProgram:"Grupo de docentes por programa"};
+  const resumen=labels[tipo]||"Destinatarios seleccionados";
+  const from=usuarioActual?.usuario||usuarioActual?.codigo||usuarioActual?.nombre||"Sistema";
+  const mail={id:"MAIL-"+Date.now(),threadId:"THR-"+Date.now(),fecha:uanAhora(),from,recipients,asunto,mensaje,estado:"Enviado",destinatarioResumen:resumen,deletedBy:[]};
+  const a=uanMail(); a.push(mail); uanSaveMail(a);
+
+  // Notification is created PER RECIPIENT, not by role.
+  const targets=recipients.map(r=>({value:r.value,rol:r.rol}));
+  uanCrearNotificacion("Nuevo correo",`${from}: ${asunto}`,"info",`renderMensajeriaUAN()`,targets);
+
+  uanRegistrarAuditoria("Correo institucional enviado",asunto,`${resumen} · ${recipients.length} destinatario(s)`);
+  renderMensajeriaUAN();
+  alert(`Correo enviado a ${recipients.length} destinatario(s).`);
+}
+
+function uanBorrarMail(id){
+  const who=usuarioActual?.usuario||usuarioActual?.codigo||"";
+  const a=uanMail(),m=a.find(x=>String(x.id)===String(id));
+  if(!m)return;
+  if(!confirm("¿Eliminar este correo de tu bandeja?"))return;
+  m.deletedBy=Array.isArray(m.deletedBy)?m.deletedBy:[];
+  if(!m.deletedBy.includes(who))m.deletedBy.push(who);
+  uanSaveMail(a);
+  uanRegistrarAuditoria("Correo eliminado de bandeja",m.asunto,id);
+  renderMensajeriaUAN();
+}
+function uanResponderMail(id){
+  const m=uanMail().find(x=>String(x.id)===String(id));
+  if(!m)return;
+  const sender=m.from||"";
+  const subject=/^re:/i.test(m.asunto||"")?m.asunto:`Re: ${m.asunto||""}`;
+  abrirModal(`<div class="status-modal"><div class="status-modal-kicker">CORREO · RESPONDER</div><h2>${escAttr(subject)}</h2><p><b>Para:</b> ${escAttr(sender)}</p><textarea id="uanReplyText" placeholder="Escribe tu respuesta..."></textarea><button onclick="uanEnviarRespuestaMail('${escAttr(id)}')">📨 Enviar respuesta</button></div>`);
+}
+function uanEnviarRespuestaMail(id){
+  const original=uanMail().find(x=>String(x.id)===String(id));
+  const text=document.getElementById("uanReplyText")?.value.trim();
+  if(!original||!text){alert("Escribe una respuesta.");return}
+  const from=usuarioActual?.usuario||usuarioActual?.codigo||usuarioActual?.nombre||"Sistema";
+  const mail={
+    id:"MAIL-"+Date.now(),
+    threadId:original.threadId||("THR-"+original.id),
+    fecha:uanAhora(),from,
+    recipients:[{value:original.from,rol:"",name:original.from,kind:"to"}],
+    asunto:/^re:/i.test(original.asunto||"")?original.asunto:`Re: ${original.asunto||""}`,
+    mensaje:text,estado:"Enviado",destinatarioResumen:`Respuesta a ${original.from}`,deletedBy:[]
+  };
+  const a=uanMail();a.push(mail);uanSaveMail(a);
+  uanCrearNotificacion("Nueva respuesta",`${from}: ${mail.asunto}`,"info","renderMensajeriaUAN()",[{value:original.from,rol:""}]);
+  uanRegistrarAuditoria("Respuesta de correo enviada",mail.asunto,mail.threadId);
+  cerrarModal();renderMensajeriaUAN();
+}
+
+function renderMisSolicitudesUAN(){
+  const who=usuarioActual?.codigo||usuarioActual?.usuario; const arr=uanTickets().filter(t=>t.owner===who).slice().reverse();
+  document.getElementById("contenido").innerHTML=`<div class="uan-module-shell"><div class="uan-module-hero"><span>SOPORTE · SEGUIMIENTO</span><h1>Mis Solicitudes</h1><p>Consulta el estado de tus solicitudes de soporte y servicios.</p></div><div class="uan-ticket-list">${arr.map(t=>`<article class="uan-ticket-card"><b>${escAttr(t.id)}</b><h3>${escAttr(t.asunto)}</h3><p>${escAttr(t.descripcion)}</p><span class="uan-pill">${escAttr(t.estado)}</span><small>${escAttr(t.fecha)} · ${escAttr(t.categoria)}</small></article>`).join("")||`<div class="uan-empty-state">No tienes solicitudes registradas.</div>`}</div></div>`;
+}
+function uanAbrirSoporte(){
+  abrirModal(`<div class="status-modal"><div class="status-modal-kicker">SOPORTE UAN</div><h2>Nueva solicitud</h2><p>Describe el problema sin compartir contraseñas.</p><select id="uanSoporteCat"><option>Problemas de acceso</option><option>Problema académico</option><option>Matrícula / pagos</option><option>Datos personales</option><option>Problema técnico</option><option>Certificados</option><option>Otro</option></select><select id="uanSoportePrioridad"><option>Normal</option><option>Alta</option><option>Urgente</option></select><input id="uanSoporteAsunto" placeholder="Asunto"><textarea id="uanSoporteTexto" style="width:100%;min-height:130px" placeholder="Describe el inconveniente..."></textarea><button onclick="uanGuardarSoporte()">Registrar solicitud</button></div>`);
+}
+function uanGuardarSoporte(){
+  const desc=document.getElementById("uanSoporteTexto")?.value.trim(), asunto=document.getElementById("uanSoporteAsunto")?.value.trim(), categoria=document.getElementById("uanSoporteCat")?.value||"Otro", prioridad=document.getElementById("uanSoportePrioridad")?.value||"Normal";
+  if(!desc||!asunto){alert("Completa asunto y descripción.");return}
+  const id="UAN-"+new Date().getFullYear()+"-"+String(uanTickets().length+1).padStart(5,"0"); const a=uanTickets(); a.push({id,fecha:uanAhora(),owner:usuarioActual?.codigo||usuarioActual?.usuario||"",ownerName:usuarioActual?.nombre||usuarioActual?.usuario||"",programa:usuarioActual?.programa||"",asunto,descripcion:desc,categoria,prioridad,estado:"Pendiente",respuesta:""}); uanSaveTickets(a); uanRegistrarAuditoria("Solicitud de soporte",asunto,id); uanCrearNotificacion("Solicitud registrada",`${id} quedó en estado Pendiente.` ,"success"); cerrarModal(); alert(`Solicitud ${id} registrada.`); if(typeof renderMisSolicitudesUAN==='function')renderMisSolicitudesUAN();
+}
+function renderSolicitudesAdminUAN(){
+  const permitido=["admisiones","director","coordinador"].includes(usuarioActual?.rol);
+  if(!permitido){abrirModal(`<div class="status-modal"><h2>Acceso restringido</h2><p>Solo perfiles autorizados pueden gestionar solicitudes.</p></div>`);return}
+  const arr=uanTickets().slice().reverse();
+  document.getElementById("contenido").innerHTML=`<div class="uan-module-shell"><div class="uan-module-hero"><span>MESA DE AYUDA · GESTIÓN</span><h1>Solicitudes y Soporte</h1><p>Atiende, responde y elimina solicitudes.</p></div><div class="uan-table-wrap"><table class="uan-table"><thead><tr><th>ID</th><th>Solicitante</th><th>Asunto</th><th>Categoría</th><th>Prioridad</th><th>Estado</th><th>Acción</th></tr></thead><tbody>${arr.map(t=>`<tr><td>${escAttr(t.id)}</td><td>${escAttr(t.ownerName)}</td><td>${escAttr(t.asunto)}</td><td>${escAttr(t.categoria)}</td><td>${escAttr(t.prioridad)}</td><td><span class="uan-pill">${escAttr(t.estado)}</span></td><td><button class="btn-secundario" onclick="uanGestionarTicket('${escAttr(t.id)}')">Gestionar</button> <button class="uan-inline-delete" onclick="uanBorrarSolicitudReal('${escAttr(t.id)}')">🗑 Eliminar</button></td></tr>`).join("")||`<tr><td colspan="7">No hay solicitudes.</td></tr>`}</tbody></table></div></div>`;
+}
+
+function uanGestionarTicket(id){
+  const t=uanTickets().find(x=>x.id===id); if(!t)return; abrirModal(`<div class="status-modal"><div class="status-modal-kicker">${escAttr(t.id)}</div><h2>${escAttr(t.asunto)}</h2><p><b>Solicitante:</b> ${escAttr(t.ownerName)}<br><b>Categoría:</b> ${escAttr(t.categoria)} · <b>Prioridad:</b> ${escAttr(t.prioridad)}</p><div class="uan-ticket-body">${escAttr(t.descripcion)}</div><select id="ticketEstado"><option ${t.estado==='Pendiente'?'selected':''}>Pendiente</option><option ${t.estado==='En atención'?'selected':''}>En atención</option><option ${t.estado==='Resuelta'?'selected':''}>Resuelta</option><option ${t.estado==='Cerrada'?'selected':''}>Cerrada</option></select><textarea id="ticketRespuesta" placeholder="Respuesta al solicitante...">${escAttr(t.respuesta||"")}</textarea><button onclick="uanGuardarTicket('${escAttr(id)}')">Guardar gestión</button></div>`);
+}
+function uanGuardarTicket(id){const a=uanTickets(),t=a.find(x=>x.id===id);if(!t)return;t.estado=document.getElementById("ticketEstado").value;t.respuesta=document.getElementById("ticketRespuesta").value.trim();uanSaveTickets(a);uanRegistrarAuditoria("Actualización de solicitud",t.estado,id);uanCrearNotificacion("Solicitud actualizada",`${id}: ${t.estado}`,"info","renderMisSolicitudesUAN()",[{value:t.owner,rol:""}]);cerrarModal();renderSolicitudesAdminUAN();}
+function renderCertificadosEstudiante(){
+  const who=usuarioActual?.codigo||usuarioActual?.usuario, arr=uanCerts().filter(c=>c.owner===who).slice().reverse();
+  document.getElementById("contenido").innerHTML=`<div class="uan-module-shell"><div class="uan-module-hero"><span>DOCUMENTOS · SERVICIOS ACADÉMICOS</span><h1>Certificados</h1><p>Solicita y consulta certificados académicos asociados a tu expediente.</p></div><section class="uan-card"><span class="uan-card-kicker">NUEVA SOLICITUD</span><h2>Solicitar certificado</h2><div class="form-grid"><select id="certTipo"><option>Certificado de estudios</option><option>Certificado de matrícula</option><option>Certificado de notas</option><option>Certificado de estudiante activo</option><option>Certificado de semestre</option></select><input id="certPeriodo" value="2026-2" placeholder="Periodo"><button onclick="uanSolicitarCertificado()">📄 Solicitar certificado</button></div></section><section class="uan-card"><span class="uan-card-kicker">MIS CERTIFICADOS</span><h2>Solicitudes anteriores</h2><div class="uan-cert-list">${arr.map(c=>`<article class="uan-cert-card"><div><b>${escAttr(c.tipo)}</b><small>${escAttr(c.id)} · ${escAttr(c.fecha)} · ${escAttr(c.estado)}</small></div>${c.estado==='Disponible'?`<button onclick="uanVerCertificado('${escAttr(c.id)}')">📥 Ver / imprimir PDF</button>`:`<span class="uan-pill">${escAttr(c.estado)}</span>`}</article>`).join("")||`<div class="uan-empty-state">Todavía no tienes certificados solicitados.</div>`}</div></section></div>`;
+}
+function uanSolicitarCertificado(){
+  const tipo=document.getElementById("certTipo").value, periodo=document.getElementById("certPeriodo").value.trim()||"2026-2", who=usuarioActual?.codigo||usuarioActual?.usuario; const e=getEstudiantes()[usuarioActual?.codigo]||{}; const id="CERT-"+new Date().getFullYear()+"-"+String(uanCerts().length+1).padStart(5,"0"); const a=uanCerts(); a.push({id,fecha:uanAhora(),owner:who,ownerName:e.nombre||usuarioActual?.nombre||who,codigo:e.codigo||who,programa:e.programa||"",tipo,periodo,estado:"Pendiente"}); uanSaveCerts(a); uanRegistrarAuditoria("Solicitud de certificado",tipo,id); uanCrearNotificacion("Certificado disponible",`${tipo} ${id} listo para generar.` ,"success"); renderCertificadosEstudiante();}
+function renderCertificadosAdminUAN(){
+  if(!usuarioActual || usuarioActual.esAdminCertificados!==true || usuarioActual.usuario!=="admin" || usuarioActual.rol!=="admisiones"){
+    abrirModal(`<div class="status-modal"><h2>Acceso restringido</h2><p>La gestión central de certificados corresponde al perfil Administrativo.</p></div>`);
+    return;
+  }
+
+  const arr=uanCerts().slice().reverse();
+  const estadoClase=(e)=>String(e||"").toLowerCase().replace(/\s+/g,"-");
+
+  document.getElementById("contenido").innerHTML=`
+    <div class="uan-module-shell">
+      <div class="uan-module-hero">
+        <span>SECRETARÍA · DOCUMENTOS OFICIALES · ADMINISTRADOR PRINCIPAL</span>
+        <h1>Gestión de Certificados</h1>
+        <p>Revisa, corrige, previsualiza, aprueba, regenera o anula certificados antes de entregarlos.</p>
+      </div>
+
+      <div class="uan-card" style="margin-bottom:18px">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <span class="uan-pill">Pendientes: ${arr.filter(c=>c.estado==="Pendiente").length}</span>
+          <span class="uan-pill">Generados: ${arr.filter(c=>c.estado==="Disponible").length}</span>
+          <span class="uan-pill">Rechazados: ${arr.filter(c=>c.estado==="Rechazado").length}</span>
+          <span class="uan-pill">Anulados: ${arr.filter(c=>c.estado==="Anulado").length}</span>
+        </div>
+      </div>
+
+      <div class="uan-table-wrap">
+        <table class="uan-table">
+          <thead>
+            <tr>
+              <th>ID</th><th>Estudiante</th><th>Tipo</th><th>Periodo</th><th>Estado</th><th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${arr.map(c=>{
+              const activo=!["Anulado","Rechazado"].includes(c.estado);
+              return `<tr>
+                <td><b>${escAttr(c.id)}</b></td>
+                <td>${escAttr(c.ownerName)}<br><small>${escAttr(c.codigo)}</small></td>
+                <td>${escAttr(c.tipo)}</td>
+                <td>${escAttr(c.periodo)}</td>
+                <td><span class="uan-pill">${escAttr(c.estado||"Pendiente")}</span></td>
+                <td>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <button class="btn-secundario" onclick="uanVerCertificado('${escAttr(c.id)}')">👁 Ver</button>
+                    ${activo ? `<button class="btn-secundario" onclick="uanEditarCertificado('${escAttr(c.id)}')">✏ Editar</button>` : ""}
+                    ${activo ? `<button class="btn-secundario" onclick="uanPrevisualizarCertificado('${escAttr(c.id)}')">📄 Previsualizar</button>` : ""}
+                    ${c.estado==="Pendiente" ? `<button class="btn-secundario" onclick="uanRechazarCertificado('${escAttr(c.id)}')">❌ Rechazar</button>` : ""}
+                    ${c.estado==="Pendiente" ? `<button onclick="uanAprobarCertificado('${escAttr(c.id)}')">✅ Generar / Aprobar</button>` : ""}
+                    ${c.estado==="Disponible" ? `<button onclick="uanRegenerarCertificado('${escAttr(c.id)}')">🔄 Regenerar</button>` : ""}
+                    ${c.estado==="Disponible" ? `<button onclick="uanAnularCertificado('${escAttr(c.id)}')">🚫 Anular</button>` : ""}
+                    ${["Anulado","Rechazado"].includes(c.estado) ? `<button class="btn-secundario" onclick="uanReactivarCertificado('${escAttr(c.id)}')">↩ Reactivar</button>` : ""}
+                  </div>
+                </td>
+              </tr>`;
+            }).join("") || `<tr><td colspan="6">No hay solicitudes de certificados.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function uanAprobarCertificado(id){
+  if(!usuarioActual || usuarioActual.esAdminCertificados!==true || usuarioActual.usuario!=="admin" || usuarioActual.rol!=="admisiones"){alert("Solo el usuario admin (contraseña 1) puede gestionar certificados.");return}
+  const a=uanCerts(),c=a.find(x=>x.id===id);
+  if(!c)return;
+  if(c.estado!=="Pendiente"){alert("Solo una solicitud pendiente puede ser aprobada.");return}
+  if(!confirm("¿Verificaste los datos y deseas generar este certificado oficialmente?"))return;
+
+  c.estado="Disponible";
+  c.aprobadoPor=usuarioActual.usuario||usuarioActual.nombre||"Administrativo";
+  c.aprobadoEn=uanAhora();
+  c.generadoEn=uanAhora();
+  c.version=Number(c.version||0)+1;
+
+  uanSaveCerts(a);
+  uanRegistrarAuditoria("Aprobación de certificado",c.tipo,id);
+  uanCrearNotificacion(
+    "Certificado generado",
+    `${c.id} está disponible para el estudiante.`,
+    "success",
+    "renderCertificadosEstudiante()",
+    [{value:c.owner,rol:"estudiante"}]
+  );
+  renderCertificadosAdminUAN();
+}
+function mostrarMensajes(){
+  const mails=uanMail().filter(m=>!m.toRole||m.toRole===usuarioActual?.rol||m.to===usuarioActual?.usuario||m.to===usuarioActual?.codigo).slice().reverse();
+  const html=mails.map(m=>`<article class="uan-mail-card"><div><b>${escAttr(m.asunto)}</b><small>${escAttr(m.fecha)} · De: ${escAttr(m.from)}</small><p>${escAttr(m.mensaje)}</p></div><span class="uan-pill">${escAttr(m.estado||"Enviado")}</span></article>`).join("")||`<div class="uan-empty-state">No tienes mensajes nuevos.</div>`;
+  abrirModal(`<div class="uan-notif-modal"><span class="uan-modal-kicker">COMUNICACIONES INSTITUCIONALES</span><h2>Mensajes</h2><p>Tu bandeja institucional.</p><div class="uan-mail-list">${html}</div><div class="uan-notif-actions"><button class="btn-secundario" onclick="cerrarModal();renderMensajeriaUAN()">Abrir Comunicaciones</button></div></div>`);
+}
+function uanNotasParaCertificado(codigo){
+  const historial=getHistorial()[codigo]||{};
+  const vistos=new Set();
+  const filas=[];
+  Object.entries(historial).forEach(([materia,r])=>{
+    if(!r || r.definitiva===undefined || r.definitiva===null) return;
+    const nota=parseFloat(r.definitiva);
+    if(isNaN(nota)) return;
+    const nombre=r.cursoElegido || materia;
+    if(vistos.has(nombre)) return;
+    vistos.add(nombre);
+    filas.push({materia:nombre,definitiva:nota,creditos:parseFloat(r.creditos)||0,aprobada:!!r.aprobada});
+  });
+  return filas.sort((a,b)=>a.materia.localeCompare(b.materia));
+}
+function uanFirmasCertificado(){
+  return `
+    <div class="uan-cert-firmas">
+      <div class="uan-cert-firma">
+        <div class="uan-firma-img-wrap"><img src="firma-director-admisiones.png" alt="Firma Director de Admisiones"></div>
+        <div class="uan-firma-line"></div>
+        <b>Director de Admisiones</b>
+        <small>Universidad Autónoma Nacional</small>
+      </div>
+      <div class="uan-cert-firma">
+        <div class="uan-firma-img-wrap"><img src="firma-director-escuela.png" alt="Firma Director de Escuela"></div>
+        <div class="uan-firma-line"></div>
+        <b>Director de Escuela</b>
+        <small>Universidad Autónoma Nacional</small>
+      </div>
+    </div>`;
+}
+function uanVerCertificado(id){
+  const c=uanCerts().find(x=>x.id===id);
+  if(!c)return;
+
+  const esNotas=String(c.tipo||"").toLowerCase().includes("notas");
+  const notas=esNotas ? uanNotasParaCertificado(c.codigo||c.owner) : [];
+  const promedio=esNotas ? calcularPromedioPonderado(notas.filter(x=>x.creditos>0)) : null;
+  const tablaNotas=esNotas ? `
+    <section class="uan-cert-notas">
+      <h3>Detalle académico</h3>
+      ${notas.length ? `<table><thead><tr><th>Asignatura</th><th>Nota definitiva</th><th>Créditos</th><th>Estado</th></tr></thead><tbody>${notas.map(n=>`<tr><td>${escAttr(n.materia)}</td><td>${n.definitiva.toFixed(1)}</td><td>${n.creditos||"—"}</td><td>${n.aprobada?"Aprobada":"Reprobada"}</td></tr>`).join("")}</tbody></table>
+      <div class="uan-cert-promedio"><span>Promedio ponderado acumulado</span><b>${promedio?promedio.promedio.toFixed(2):"—"}</b></div>` : `<div class="uan-empty-state">No hay notas definitivas registradas todavía para este estudiante.</div>`}
+    </section>` : "";
+
+  abrirModal(`<div class="uan-certificate">
+    <div class="uan-cert-head"><img src="uan-emblem.svg" alt="UAN"><div><b>UNIVERSIDAD AUTÓNOMA NACIONAL</b><small>SECRETARÍA ACADÉMICA</small></div></div>
+    <h1>${escAttr(c.tipo)}</h1>
+    <p>La Universidad Autónoma Nacional certifica que:</p>
+    <h2>${escAttr(c.ownerName)}</h2>
+    <p>identificado(a) con código <b>${escAttr(c.codigo)}</b>, pertenece al programa <b>${escAttr(c.programa||"Programa académico")}</b> durante el periodo <b>${escAttr(c.periodo)}</b>.</p>
+    ${tablaNotas}
+    <div class="uan-cert-number">Certificado No. ${escAttr(c.id)} · Expedición: ${escAttr(c.fecha)}</div>
+    ${uanFirmasCertificado()}
+    <div class="uan-cert-actions"><button onclick="window.print()">🖨 Guardar como PDF / Imprimir</button><button class="btn-secundario" onclick="cerrarModal()">Cerrar</button></div>
+  </div>`);
+  uanRegistrarAuditoria("Consulta de certificado",c.tipo,id);
+}
+
+
+// Instrumentación de acciones críticas existentes.
+(function(){
+  const originalLogout=window.logout;
+  if(typeof originalLogout==="function" && !window.__uanLogoutWrapped){
+    window.logout=function(){try{uanRegistrarAuditoria("Cierre de sesión","El usuario cerró su sesión");}catch(e){} return originalLogout.apply(this,arguments);};
+    window.__uanLogoutWrapped=true;
+  }
+})();
+
+
+(function(){
+  const wraps=[
+    ["guardarAccesoCuentaAdmin",()=>"Cambio de credenciales administrativas"],
+    ["guardarAccesoDocenteAdmin",()=>"Cambio de credenciales de docente"],
+    ["guardarAccesoEstudianteAdmin",()=>"Cambio de credenciales de estudiante"],
+    ["guardarAccesoDocenteAdmin",()=>"Cambio de credenciales de docente"]
+  ];
+  wraps.forEach(([name,label])=>{
+    const fn=window[name];
+    if(typeof fn!=="function" || fn.__uanWrapped)return;
+    const w=function(){
+      const r=fn.apply(this,arguments);
+      try{uanRegistrarAuditoria(label,"Se guardó un cambio de acceso.");}catch(e){}
+      return r;
+    };
+    w.__uanWrapped=true; window[name]=w;
+  });
+})();
+
+// Al cargar cada dashboard, refrescamos el contador de notificaciones.
+setTimeout(actualizarBadgeNotificaciones,300);
+
+
+
+
+
+
+/* UAN V53 - GESTION REAL DE BORRADO Y REFRESCO */
+(function(){
+  function canManage(){
+    return !!usuarioActual && usuarioActual.esAdminCertificados===true && usuarioActual.usuario==="admin" && usuarioActual.rol==="admisiones";
+  }
+  function confirmDelete(label){
+    return confirm(`¿Eliminar ${label}? Esta acción no se puede deshacer.`);
+  }
+  function audit(action, detail, id){
+    try{ if(typeof uanRegistrarAuditoria==="function") uanRegistrarAuditoria(action,detail,id); }catch(e){}
+  }
+
+  window.uanBorrarCertificadoReal=function(id){
+    if(!canManage()){alert("No tienes permisos para eliminar certificados.");return}
+    if(!confirmDelete("este certificado"))return;
+    const a=uanCerts().filter(x=>String(x.id)!==String(id));
+    uanSaveCerts(a);
+    audit("Certificado eliminado","Solicitud de certificado",id);
+    renderCertificadosAdminUAN();
+  };
+
+  window.uanBorrarSolicitudReal=function(id){
+    if(!canManage()){alert("No tienes permisos para eliminar solicitudes.");return}
+    if(!confirmDelete("esta solicitud"))return;
+    const a=uanTickets().filter(x=>String(x.id)!==String(id));
+    uanSaveTickets(a);
+    audit("Solicitud eliminada","Mesa de ayuda",id);
+    renderSolicitudesAdminUAN();
+  };
+
+  window.uanBorrarNotificacion=function(id){
+    const who=usuarioActual?.usuario||usuarioActual?.codigo||"";
+    const a=uanLeerLS(UAN_NOTIF_KEY,[]);
+    const n=a.find(x=>String(x.id)===String(id));
+    if(!n)return;
+    if(!confirmDelete("esta notificación"))return;
+    n.deletedBy=Array.isArray(n.deletedBy)?n.deletedBy:[];
+    if(!n.deletedBy.includes(who))n.deletedBy.push(who);
+    uanGuardarLS(UAN_NOTIF_KEY,a);
+    actualizarBadgeNotificaciones();
+    mostrarNotificaciones();
+  };
+
+  // Legacy aliases, now pointed to the real stores/refresh behavior.
+  window.uanV52BorrarCertificado=window.uanBorrarCertificadoReal;
+  window.uanV52BorrarSolicitud=window.uanBorrarSolicitudReal;
+  window.uanV52BorrarMensaje=window.uanBorrarMail;
+  window.uanV52BorrarNotificacion=window.uanBorrarNotificacion;
+})();
+
+
+
+/* UAN V54 - FLUJO PROFESIONAL DE CERTIFICADOS */
+(function(){
+  const canManage=()=>!!usuarioActual && usuarioActual.esAdminCertificados===true && usuarioActual.usuario==="admin" && usuarioActual.rol==="admisiones";
+
+  function getCert(id){
+    return uanCerts().find(c=>String(c.id)===String(id));
+  }
+  function saveCert(c){
+    const a=uanCerts();
+    const i=a.findIndex(x=>String(x.id)===String(c.id));
+    if(i>=0)a[i]=c;
+    else a.push(c);
+    uanSaveCerts(a);
+  }
+  function notifyOwner(c,title,text){
+    try{
+      uanCrearNotificacion(title,text,"info","renderCertificadosEstudiante()",[{value:c.owner,rol:"estudiante"}]);
+    }catch(e){}
+  }
+
+  window.uanEditarCertificado=function(id){
+    if(!canManage()){alert("Solo Admisiones puede editar certificados.");return}
+    const c=getCert(id); if(!c)return;
+    if(["Anulado","Rechazado"].includes(c.estado)){alert("Reactiva primero el certificado para editarlo.");return}
+
+    abrirModal(`
+      <div class="uan-edit-cert">
+        <span class="uan-modal-kicker">REVISIÓN ADMINISTRATIVA</span>
+        <h2>Editar solicitud ${escAttr(c.id)}</h2>
+        <p>Corrige los datos antes de generar el documento oficial.</p>
+        <label>Tipo de certificado
+          <select id="v54CertTipo">
+            ${["Certificado de estudios","Certificado de matrícula","Certificado de notas","Certificado de estudiante activo","Certificado de semestre"].map(x=>`<option ${x===c.tipo?"selected":""}>${x}</option>`).join("")}
+          </select>
+        </label>
+        <label>Periodo
+          <input id="v54CertPeriodo" value="${escAttr(c.periodo||"")}">
+        </label>
+        <label>Observación administrativa
+          <textarea id="v54CertObs" rows="4" placeholder="Corrección, nota interna o motivo de revisión">${escAttr(c.observacionAdmin||"")}</textarea>
+        </label>
+        <div class="uan-notif-actions">
+          <button onclick="uanGuardarEdicionCertificado('${escAttr(c.id)}')">💾 Guardar cambios</button>
+          <button class="btn-secundario" onclick="cerrarModal()">Cancelar</button>
+        </div>
+      </div>
+    `);
+  };
+
+  window.uanGuardarEdicionCertificado=function(id){
+    if(!canManage())return;
+    const c=getCert(id); if(!c)return;
+    c.tipo=document.getElementById("v54CertTipo")?.value||c.tipo;
+    c.periodo=document.getElementById("v54CertPeriodo")?.value.trim()||c.periodo;
+    c.observacionAdmin=document.getElementById("v54CertObs")?.value.trim()||"";
+    c.ultimaEdicionPor=usuarioActual.usuario||usuarioActual.nombre||"Administrativo";
+    c.ultimaEdicionEn=uanAhora();
+    c.version=Number(c.version||0)+1;
+    saveCert(c);
+    uanRegistrarAuditoria("Edición de certificado",`${c.tipo} · ${c.id}`,c.id);
+    cerrarModal();
+    renderCertificadosAdminUAN();
+  };
+
+  window.uanPrevisualizarCertificado=function(id){
+    const c=getCert(id); if(!c)return;
+    // Reutiliza el mismo generador oficial, pero con etiqueta de previsualización.
+    const esNotas=String(c.tipo||"").toLowerCase().includes("notas");
+    const notas=esNotas ? uanNotasParaCertificado(c.codigo||c.owner) : [];
+    const promedio=esNotas && typeof calcularPromedioPonderado==="function"
+      ? calcularPromedioPonderado(notas.filter(x=>x.creditos>0)) : null;
+    const tabla=esNotas && notas.length ? `
+      <section class="uan-cert-notas">
+        <h3>Detalle académico</h3>
+        <table><thead><tr><th>Asignatura</th><th>Nota definitiva</th><th>Créditos</th><th>Estado</th></tr></thead>
+        <tbody>${notas.map(n=>`<tr><td>${escAttr(n.materia)}</td><td>${Number(n.definitiva).toFixed(1)}</td><td>${n.creditos||"—"}</td><td>${n.aprobada?"Aprobada":"Reprobada"}</td></tr>`).join("")}</tbody></table>
+        <div class="uan-cert-promedio"><span>Promedio ponderado acumulado</span><b>${promedio?promedio.promedio.toFixed(2):"—"}</b></div>
+      </section>` : "";
+
+    abrirModal(`
+      <div class="uan-certificate">
+        <div style="text-align:right"><span class="uan-pill">PREVISUALIZACIÓN · NO OFICIAL</span></div>
+        <div class="uan-cert-head"><img src="uan-emblem.svg" alt="UAN"><div><b>UNIVERSIDAD AUTÓNOMA NACIONAL</b><small>SECRETARÍA ACADÉMICA</small></div></div>
+        <h1>${escAttr(c.tipo)}</h1>
+        <p>La Universidad Autónoma Nacional certifica que:</p>
+        <h2>${escAttr(c.ownerName)}</h2>
+        <p>identificado(a) con código <b>${escAttr(c.codigo)}</b>, pertenece al programa <b>${escAttr(c.programa||"Programa académico")}</b> durante el periodo <b>${escAttr(c.periodo)}</b>.</p>
+        ${tabla}
+        <div class="uan-cert-number">Solicitud ${escAttr(c.id)} · Versión ${Number(c.version||1)}</div>
+        ${typeof uanFirmasCertificado==="function"?uanFirmasCertificado():""}
+        <div class="uan-cert-actions"><button class="btn-secundario" onclick="cerrarModal()">Cerrar revisión</button></div>
+      </div>
+    `);
+    uanRegistrarAuditoria("Previsualización de certificado",c.tipo,id);
+  };
+
+  window.uanRechazarCertificado=function(id){
+    if(!canManage())return;
+    const c=getCert(id); if(!c)return;
+    if(c.estado!=="Pendiente"){alert("Solo una solicitud pendiente puede rechazarse.");return}
+    const motivo=prompt("Indica el motivo del rechazo:");
+    if(!motivo || !motivo.trim())return;
+    c.estado="Rechazado";
+    c.motivoRechazo=motivo.trim();
+    c.rechazadoPor=usuarioActual.usuario||usuarioActual.nombre||"Administrativo";
+    c.rechazadoEn=uanAhora();
+    saveCert(c);
+    uanRegistrarAuditoria("Rechazo de certificado",motivo,c.id);
+    notifyOwner(c,"Certificado rechazado",`${c.id}: ${motivo}`);
+    renderCertificadosAdminUAN();
+  };
+
+  window.uanRegenerarCertificado=function(id){
+    if(!canManage())return;
+    const c=getCert(id); if(!c)return;
+    if(c.estado!=="Disponible"){alert("Solo puedes regenerar un certificado disponible.");return}
+    if(!confirm("Se creará una nueva versión del certificado con los datos académicos actuales. ¿Continuar?"))return;
+    c.version=Number(c.version||1)+1;
+    c.regeneradoPor=usuarioActual.usuario||usuarioActual.nombre||"Administrativo";
+    c.regeneradoEn=uanAhora();
+    c.estado="Disponible";
+    saveCert(c);
+    uanRegistrarAuditoria("Regeneración de certificado",`Versión ${c.version}`,c.id);
+    notifyOwner(c,"Certificado actualizado",`${c.id} fue regenerado y conserva su validez.`);
+    renderCertificadosAdminUAN();
+  };
+
+  window.uanAnularCertificado=function(id){
+    if(!canManage())return;
+    const c=getCert(id); if(!c)return;
+    if(c.estado!=="Disponible"){alert("Solo puedes anular certificados generados.");return}
+    const motivo=prompt("Indica el motivo de la anulación:");
+    if(!motivo || !motivo.trim())return;
+    if(!confirm("¿Confirmas ANULAR este certificado oficial? El documento no se borrará: quedará trazabilidad de la anulación."))return;
+    c.estado="Anulado";
+    c.motivoAnulacion=motivo.trim();
+    c.anuladoPor=usuarioActual.usuario||usuarioActual.nombre||"Administrativo";
+    c.anuladoEn=uanAhora();
+    saveCert(c);
+    uanRegistrarAuditoria("Anulación de certificado",motivo,c.id);
+    notifyOwner(c,"Certificado anulado",`${c.id} fue anulado por la oficina de Admisiones.`);
+    renderCertificadosAdminUAN();
+  };
+
+  window.uanReactivarCertificado=function(id){
+    if(!canManage())return;
+    const c=getCert(id); if(!c)return;
+    if(!confirm("¿Reactivar esta solicitud para volver a revisarla?"))return;
+    c.estado="Pendiente";
+    c.reactivadoPor=usuarioActual.usuario||usuarioActual.nombre||"Administrativo";
+    c.reactivadoEn=uanAhora();
+    saveCert(c);
+    uanRegistrarAuditoria("Reactivación de certificado","Solicitud reactivada para revisión",c.id);
+    renderCertificadosAdminUAN();
+  };
+})();
+
+
+/* UAN V55 - ADMIN PRINCIPAL CERTIFICADOS */
+(function(){
+  // ÚNICA cuenta autorizada para editar/anular/generar certificados:
+  // usuario: admin / contraseña: 1
+  window.uanEsAdminPrincipalCertificados=function(){
+    const u=usuarioActual;
+    return !!u &&
+      u.esAdminCertificados===true &&
+      u.usuario==="admin" &&
+      u.rol==="admisiones";
+  };
+})();
+
+
+/* UAN V56 — FIX CRÍTICO DE PERMISOS
+   usuarioActual usa let y no existe como window.usuarioActual.
+   Toda la gestión de certificados usa ahora la variable correcta.
+   Única cuenta: admin / 1. */

@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="estilos.css?v=41">
-<link rel="stylesheet" href="uan_fix_v39.css?v=41">
+<link rel="stylesheet" href="estilos.css?v=56">
+<link rel="stylesheet" href="uan_fix_v39.css?v=46">
 </head>
 <body>
 
@@ -77,6 +77,7 @@
       <div class="brand">Plataforma Académica UAN</div>
     </div>
     <div style="display:flex;align-items:center;gap:16px">
+      <button class="topbar-icon uan-topbar-action topbar-logout" type="button" onclick="logout()" title="Cerrar sesión" aria-label="Cerrar sesión">↪ <span>Salir</span></button>
       <button class="topbar-icon uan-topbar-action" type="button" onclick="mostrarMensajes()" title="Mensajes" aria-label="Mensajes">✉️</button>
       <button class="topbar-icon uan-topbar-action uan-notif-trigger" type="button" onclick="mostrarNotificaciones()" title="Notificaciones" aria-label="Notificaciones">🔔<i id="uanNotifBadge">0</i></button>
       <span id="topbarUsuario" style="font-size:14px">👤</span>
@@ -115,6 +116,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="app.js?v=41"></script>
+<script src="app.js?v=56"></script>
 </body>
 </html>
