@@ -10122,7 +10122,7 @@ window.uanProgramOptionsV60=function(selected){
       if(menu.querySelector(".uan-v66-menu"))return;
       let extra="";
       if(usuarioActual.rol==="estudiante"){
-        extra+=`<div class="menu-item uan-v66-menu" onclick="renderDashboardEstudianteV66()">🏠 Inicio académico <span>›</span></div><div class="menu-item uan-v66-menu" onclick="renderSeguimientoEstudianteV66()">🎓 Seguimiento académico <span>›</span></div><div class="menu-item uan-v66-menu" onclick="renderPagoMatriculaV64()">💳 Pagar matrícula <span>›</span></div>`;
+        extra+=`<div class="menu-item uan-v66-menu" onclick="renderSeguimientoEstudianteV66()">🎓 Seguimiento académico <span>›</span></div>`;
       }
       if(["coordinador","director","admisiones"].includes(usuarioActual.rol)){
         extra+=`<div class="menu-item uan-v66-menu" onclick="renderGestionSeguimientoV66()">🎓 Seguimiento académico <span>›</span></div>`;
@@ -10400,4 +10400,44 @@ window.uanProgramOptionsV60=function(selected){
     };
     window.__uanV70Menu=true;
   }
+})();
+
+
+
+/* ================================================================
+   UAN V71 — LIMPIEZA DEL MENÚ ESTUDIANTE
+   Inicio académico se elimina: se conserva el Inicio normal.
+   Pagar matrícula queda una sola vez.
+   ================================================================ */
+(function(){
+  if(window.__uanV71MenuCleanup)return;
+  const oldSidebar=window.renderSidebar;
+  if(typeof oldSidebar!=="function")return;
+  window.renderSidebar=function(){
+    oldSidebar.apply(this,arguments);
+    const m=document.getElementById("menuDinamico");
+    if(!m||!usuarioActual)return;
+
+    // El Inicio normal pertenece al menú original; quitar solo el duplicado "Inicio académico".
+    m.querySelectorAll(".menu-item").forEach(el=>{
+      const t=(el.textContent||"").replace(/\s+/g," ").trim().toLowerCase();
+      if(t.includes("inicio académico")) el.remove();
+    });
+
+    // Eliminar cualquier pago duplicado y reconstruir un único acceso.
+    const payments=[...m.querySelectorAll(".menu-item")].filter(el=>{
+      const t=(el.textContent||"").replace(/\s+/g," ").trim().toLowerCase();
+      return t.includes("pagar matrícula");
+    });
+    payments.slice(1).forEach(el=>el.remove());
+
+    if(usuarioActual.rol==="estudiante" && payments.length===0){
+      m.insertAdjacentHTML("beforeend",`<div class="menu-item uan-v71-payment" onclick="renderPagoMatriculaV64()">💳 Pagar matrícula <span>›</span></div>`);
+    }
+
+    // Eliminar cualquier viejo item de pago V64/V66/V70 sobrante por clase.
+    const pay=[...m.querySelectorAll(".menu-item")].filter(el=>(el.textContent||"").toLowerCase().includes("pagar matrícula"));
+    pay.slice(1).forEach(el=>el.remove());
+  };
+  window.__uanV71MenuCleanup=true;
 })();
