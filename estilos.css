@@ -4400,3 +4400,125 @@ body .modal-cerrar:hover{
   border:1px solid rgba(20,40,60,.18);border-radius:9px;background:#fff;
 }
 .uan-certificate .uan-pill{display:inline-flex}
+
+
+/* ================================================================
+   UAN V57 — CALENDARIO ACADÉMICO EDITABLE
+   ================================================================ */
+.uan-event-main{flex:1;min-width:0}
+.uan-event-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px;padding-top:11px;border-top:1px solid #edf0ee}
+.uan-event-actions button{width:auto!important;margin:0!important;padding:7px 11px!important;font-size:11px!important}
+.uan-calendar-admin-banner{margin-top:18px;padding:14px 17px;border:1px solid #dfe6e2;border-radius:14px;background:#f7faf8;display:flex;align-items:center;justify-content:space-between;gap:15px}
+.uan-calendar-admin-banner b{display:block;color:#173f2c;font-size:14px}
+.uan-calendar-admin-banner span{display:block;color:#6a786f;font-size:11px;margin-top:3px}
+.uan-calendar-admin-role{padding:7px 10px!important;border-radius:999px;background:#eaf3ed!important;color:#2c6a45!important;font:700 9px 'JetBrains Mono',monospace!important;letter-spacing:.08em}
+.uan-calendar-edit-modal h2{margin:6px 0 8px;font-family:Fraunces,serif;color:#173f2c}
+.uan-calendar-edit-modal>p{color:#68766e;font-size:12px;line-height:1.5;margin-bottom:18px}
+.uan-calendar-edit-modal .form-grid label{font-size:11px;font-weight:700;color:#52635a}
+.uan-calendar-edit-modal .form-grid label input,.uan-calendar-edit-modal .form-grid label textarea{display:block;width:100%;box-sizing:border-box;margin-top:5px}
+.uan-calendar-modal-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:18px}
+.uan-calendar-modal-actions button{width:auto!important;margin:0!important;padding:10px 15px!important}
+@media(max-width:700px){.uan-calendar-admin-banner{align-items:flex-start;flex-direction:column}.uan-event-actions button{flex:1}.uan-calendar-modal-actions{flex-direction:column}.uan-calendar-modal-actions button{width:100%!important}}
+
+/* ================================================================
+   UAN V58 — SUITE INSTITUCIONAL
+   ================================================================ */
+.uan-profile-head{display:flex;align-items:center;gap:18px;margin-bottom:22px}
+.uan-profile-head img{width:82px;height:82px;border-radius:50%;object-fit:cover;border:2px solid rgba(20,70,50,.14)}
+.uan-profile-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:18px}
+.uan-profile-grid label,.uan-edit-cert label,.status-modal label{display:block;font-weight:600}
+.uan-profile-grid input,.status-modal input,.status-modal select,.status-modal textarea{
+  width:100%;box-sizing:border-box;margin-top:6px;padding:11px 12px;border:1px solid rgba(20,40,60,.16);border-radius:9px;background:#fff;
+}
+.uan-service-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.uan-service-card{display:flex;gap:14px;padding:18px;border:1px solid rgba(20,40,60,.10);border-radius:14px;background:rgba(255,255,255,.78)}
+.uan-service-icon{font-size:27px}
+.uan-service-card h3{margin:4px 0 7px}
+.uan-service-card p{margin:0 0 12px;color:#65706b}
+.uan-thread{display:flex;flex-direction:column;gap:10px;max-height:430px;overflow:auto;margin:16px 0}
+.uan-thread-message{padding:14px;border:1px solid rgba(20,40,60,.10);border-radius:12px;background:#fafbf9}
+.uan-thread-message small{display:block;color:#68736e;margin-top:3px}
+.uan-clean-list{line-height:1.9;color:#4f5c56}
+.uan-v58-extra{border-left:2px solid rgba(30,100,70,.18)}
+@media(max-width:800px){
+  .uan-profile-grid,.uan-service-grid{grid-template-columns:1fr}
+}
+
+/* UAN V59 - CC CCO */
+.v59-recipient-box{margin:8px 0}
+.v59-recipient-box label{display:block;font-size:13px;font-weight:700;margin-bottom:5px}
+.v59-recipient-row{display:flex;gap:8px}
+.v59-recipient-row select{flex:1;min-width:0;padding:10px;border:1px solid rgba(20,40,60,.16);border-radius:9px;background:#fff}
+.v59-recipient-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:7px}
+.v59-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border-radius:999px;background:#eef3ef;border:1px solid rgba(20,70,50,.12);font-size:12px}
+.v59-chip button{border:0;background:transparent;cursor:pointer;font-weight:800;padding:0 2px}
+
+/* UAN V60 — roles y programas */
+.uan-role-grid-v60{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.uan-role-card-v60{padding:20px;border:1px solid rgba(20,50,40,.11);border-radius:16px;background:#fff}
+.uan-role-card-v60 h3{margin:8px 0}
+.uan-role-card-v60 p{color:#68736e}
+@media(max-width:850px){.uan-role-grid-v60{grid-template-columns:1fr}}
+
+/* UAN V63 — Tesorería */
+.uan-payment-ok{background:rgba(46,160,67,.12)!important;color:#1c7a34!important}
+.uan-payment-bad{background:rgba(210,55,55,.12)!important;color:#a52a2a!important}
+.uan-payment-pending{background:rgba(218,148,22,.13)!important;color:#99650c!important}
+.uan-warning-box,.uan-success-box{margin-top:18px;padding:15px 17px;border-radius:12px;line-height:1.55}
+.uan-warning-box{background:rgba(218,148,22,.10);border:1px solid rgba(218,148,22,.20)}
+.uan-success-box{background:rgba(46,160,67,.09);border:1px solid rgba(46,160,67,.18)}
+
+/* UAN V64 — Pasarela de pago simulada */
+.uan-payment-card{max-width:820px}
+.uan-payment-summary{padding:20px;border-radius:14px;background:#f5f8f5;margin-bottom:15px}
+.uan-payment-summary span{display:block;font-size:12px;font-weight:800;letter-spacing:.08em}
+.uan-payment-summary strong{display:block;font-size:30px;margin:6px 0}
+.uan-payment-summary small{color:#68736e}
+.uan-payment-notice{padding:14px 16px;border-radius:11px;background:rgba(30,100,70,.07);border:1px solid rgba(30,100,70,.12);margin-bottom:18px}
+.uan-payment-form{display:flex;flex-direction:column;gap:14px}
+.uan-payment-form label{font-weight:700}
+.uan-payment-form input,.uan-payment-form select{width:100%;box-sizing:border-box;margin-top:6px;padding:12px;border:1px solid rgba(20,40,60,.16);border-radius:9px;background:#fff}
+.uan-payment-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:650px){.uan-payment-row{grid-template-columns:1fr}}
+
+/* UAN V66 — interfaz estudiante */
+.v66-student-home{max-width:1180px;margin:0 auto;padding:8px 4px 40px}
+.v66-welcome{display:flex;justify-content:space-between;align-items:center;padding:28px 30px;border-radius:22px;background:linear-gradient(135deg,#f5f7f5,#fff);border:1px solid rgba(20,60,45,.09);margin-bottom:18px}
+.v66-welcome span,.v66-card-title span{font-size:11px;letter-spacing:.12em;font-weight:800;color:#607069}
+.v66-welcome h1{margin:8px 0 5px;font-size:30px}
+.v66-welcome p{margin:0;color:#68736e}
+.v66-avatar{width:70px;height:70px;border-radius:50%;display:grid;place-items:center;background:#eef3ef;font-size:30px}
+.v66-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+.v66-kpis>div{background:#fff;border:1px solid rgba(20,60,45,.09);border-radius:15px;padding:18px}
+.v66-kpis span{display:block;font-size:10px;letter-spacing:.1em;font-weight:800;color:#68736e}
+.v66-kpis strong{display:block;font-size:25px;margin-top:7px}
+.v66-home-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:18px}
+.v66-card-title{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:13px}
+.v66-card-title h2{margin:4px 0 0}
+.v66-event{display:flex;justify-content:space-between;padding:14px 0;border-top:1px solid rgba(20,40,60,.08)}
+.v66-event span{color:#68736e}
+.v66-follow{display:flex;gap:10px;align-items:flex-start;padding:12px 0;border-top:1px solid rgba(20,40,60,.08)}
+.v66-follow small{display:block;color:#68736e;margin-top:4px}
+.v66-success{padding:15px;border-radius:12px;background:rgba(46,160,67,.08);margin-bottom:12px}
+.v66-quick{margin-top:18px}.v66-quick>span{font-size:11px;font-weight:800;letter-spacing:.1em}.v66-quick>div{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+.v66-two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:850px){.v66-kpis{grid-template-columns:repeat(2,1fr)}.v66-home-grid{grid-template-columns:1fr}}
+@media(max-width:560px){.v66-welcome{padding:20px}.v66-welcome h1{font-size:23px}.v66-kpis{grid-template-columns:1fr}.v66-two{grid-template-columns:1fr}}
+
+/* UAN V68 — TG integrado al pensum */
+.v68-matricula-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.v68-matricula-grid>div{padding:20px;border:1px solid rgba(20,60,45,.1);border-radius:15px;background:#fff}
+.v68-matricula-grid span,.v68-proposal-head span{display:block;font-size:10px;font-weight:800;letter-spacing:.11em;color:#68736e}
+.v68-matricula-grid b{display:block;font-size:20px;margin:8px 0}
+.v68-proposal-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.v68-proposal-head h2{margin:7px 0}
+.v68-proposal-data{line-height:1.6}
+@media(max-width:700px){.v68-matricula-grid{grid-template-columns:1fr}.v68-proposal-head{flex-direction:column}}
+
+/* UAN V70 — matrícula real */
+.v70-enrollment-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.v70-enrollment-grid>div{padding:20px;border:1px solid rgba(20,60,45,.1);border-radius:15px;background:#fff}
+.v70-enrollment-grid span{display:block;font-size:10px;font-weight:800;letter-spacing:.11em;color:#68736e}
+.v70-enrollment-grid strong{display:block;font-size:19px;margin:8px 0}
+.v70-ok{color:#19733a}.v70-pending{color:#8b6814}
+@media(max-width:700px){.v70-enrollment-grid{grid-template-columns:1fr}}
