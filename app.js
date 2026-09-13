@@ -154,14 +154,21 @@ async function empujarEstudiantesASupabase(obj){
 
 const CUENTAS_ADMIN_SEED = [
   {usuario:"admin",    password:"1", rol:"admisiones"},
-  {usuario:"biblio",   password:"1", rol:"biblioteca"},
-  {usuario:"tesoreria", password:"1", rol:"tesoreria"},
   {usuario:"sistemas", password:"1", rol:"director",     programa:"Sistemas"},
-  {usuario:"sistemas", password:"2", rol:"coordinador",  programa:"Sistemas"}
+  {usuario:"sistemas", password:"2", rol:"coordinador",  programa:"Sistemas"},
+  {usuario:"decano",   password:"1", rol:"decano"}
 ];
 function getCuentasAdmin(){
   const stored = localStorage.getItem("uan_cuentas_admin");
-  if(stored) return JSON.parse(stored);
+  if(stored){
+    const arr = JSON.parse(stored);
+    // Migración V72: incorpora la cuenta de Decanatura sin borrar cuentas existentes.
+    if(!arr.some(c=>c.rol==="decano")){
+      arr.push({usuario:"decano",password:"1",rol:"decano"});
+      localStorage.setItem("uan_cuentas_admin", JSON.stringify(arr));
+    }
+    return arr;
+  }
   localStorage.setItem("uan_cuentas_admin", JSON.stringify(CUENTAS_ADMIN_SEED));
   return CUENTAS_ADMIN_SEED.slice();
 }
@@ -219,8 +226,68 @@ function savePrograms(obj){
   empujarProgramasASupabase(obj);
 }
 
+/* ----------------------------------------------------------------------
+   MÓDULO 2.5: HORARIOS
+
+   Los horarios pasan a Supabase. Se conserva localStorage como caché
+   síncrona para no romper las funciones antiguas que todavía leen esta
+   clave directamente. La tabla esperada es: horarios(programa, data).
+   ---------------------------------------------------------------------- */
+async function sincronizarHorariosDesdeSupabase(){
+  if(!supabaseClient) return;
+  try{
+    const { data, error } = await supabaseClient.from("horarios").select("programa,data");
+    if(error){
+      console.error("Error leyendo horarios de Supabase:", error);
+      return;
+    }
+    const filas = data || [];
+    const localActual = getHorarios();
+
+    // Si Supabase ya tiene información, esa es la fuente de verdad.
+    if(filas.length){
+      const horariosObj = {};
+      filas.forEach(row=>{ horariosObj[row.programa] = row.data; });
+      localStorage.setItem("uan_horarios", JSON.stringify(horariosObj));
+      return;
+    }
+
+    // Migración inicial: si la tabla está vacía pero este navegador tiene
+    // horarios anteriores, se suben una sola vez en lugar de perderlos.
+    if(Object.keys(localActual).length){
+      await empujarHorariosASupabase(localActual);
+    }
+  }catch(err){
+    console.error("No se pudo conectar con Supabase (horarios), se sigue usando la copia local:", err);
+  }
+}
+
+async function empujarHorariosASupabase(obj){
+  if(!supabaseClient) return;
+  try{
+    const { error: deleteError } = await supabaseClient
+      .from("horarios")
+      .delete()
+      .neq("programa", "___ninguno___");
+    if(deleteError){
+      console.error("No se pudo limpiar horarios en Supabase:", deleteError);
+      return;
+    }
+    const filas = Object.keys(obj).map(programa=>({programa, data:obj[programa]}));
+    if(filas.length){
+      const { error } = await supabaseClient.from("horarios").insert(filas);
+      if(error) console.error("No se pudo guardar horarios en Supabase:", error);
+    }
+  }catch(err){
+    console.error("No se pudo guardar horarios en Supabase:", err);
+  }
+}
+
 function getHorarios(){ return JSON.parse(localStorage.getItem("uan_horarios") || "{}"); }
-function saveHorarios(obj){ localStorage.setItem("uan_horarios", JSON.stringify(obj)); }
+function saveHorarios(obj){
+  localStorage.setItem("uan_horarios", JSON.stringify(obj));
+  empujarHorariosASupabase(obj);
+}
 
 function getDocentes(){ return JSON.parse(localStorage.getItem("uan_docentes") || "{}"); }
 function saveDocentes(obj){
@@ -843,7 +910,31 @@ function saveEvaluacionPendiente(obj){
   empujarEvaluacionPendienteASupabase(obj);
 }
 
+const UAN_PERIODO_ACTUAL="2026-2";
 function getHistorial(){ return JSON.parse(localStorage.getItem("uan_historial_academico") || "{}"); }
+function getHistorialPeriodos(codigo){
+  const h=getHistorial()[codigo]||{}, out={};
+  Object.entries(h).forEach(([materia,r])=>{
+    if(!r || typeof r!=="object") return;
+    if(r.periodos && typeof r.periodos==="object") Object.entries(r.periodos).forEach(([periodo,entry])=>{ if(entry&&entry.definitiva!==undefined){if(!out[periodo])out[periodo]={};out[periodo][materia]={...entry};} });
+  });
+  if(!out[UAN_PERIODO_ACTUAL])out[UAN_PERIODO_ACTUAL]={};
+  Object.entries(h).forEach(([materia,r])=>{if(materia!=="__periodos"&&r&&typeof r==="object"&&r.definitiva!==undefined&&(!r.periodos||Object.keys(r.periodos).length===0)&&!out[UAN_PERIODO_ACTUAL][materia])out[UAN_PERIODO_ACTUAL][materia]={...r};});
+  return out;
+}
+function getPeriodosDisponibles(codigo){ const p=Object.keys(getHistorialPeriodos(codigo)); if(!p.includes(UAN_PERIODO_ACTUAL))p.push(UAN_PERIODO_ACTUAL); return p.sort((a,b)=>String(b).localeCompare(String(a))); }
+function entradasHistorialPeriodo(codigo,periodo){
+  const h=getHistorialPeriodos(codigo)[periodo]||{}, out=[], vistos=new Set();
+  Object.entries(h).forEach(([materia,r])=>{if(!r||r.definitiva===undefined||r.definitiva===null)return; const nombre=r.cursoElegido||materia; if(vistos.has(nombre))return; vistos.add(nombre); out.push({...r,materia:nombre});});
+  return out;
+}
+function entradasHistorialTodasPeriodos(codigo){
+  const out=[], vistos=new Set();
+  Object.entries(getHistorialPeriodos(codigo)).forEach(([periodo,h])=>Object.entries(h||{}).forEach(([materia,r])=>{
+    if(!r||r.definitiva===undefined||r.definitiva===null)return; const nombre=r.cursoElegido||materia, key=periodo+"::"+nombre; if(vistos.has(key))return; vistos.add(key); out.push({...r,periodo,materia:nombre});
+  }));
+  return out;
+}
 function saveHistorial(obj){
   localStorage.setItem("uan_historial_academico", JSON.stringify(obj));
   empujarHistorialASupabase(obj);
@@ -862,13 +953,8 @@ function saveNormalidadEstudiantes(obj){
 
 /* Promedio ponderado ACUMULADO (toda la carrera) de un estudiante, o null si aún no tiene notas. */
 function calcularPromedioAcumulado(codigo){
-  const historial = getHistorial()[codigo] || {};
-  const todasEntradas = Object.keys(historial).map(m=>({
-    materia:m, definitiva:historial[m].definitiva, creditos:historial[m].creditos
-  }));
-  if(todasEntradas.length===0) return null;
-  const rp = calcularPromedioPonderado(todasEntradas);
-  return rp ? rp.promedio : null;
+  const todasEntradas=entradasHistorialTodasPeriodos(codigo).map(x=>({materia:`${x.periodo} · ${x.materia}`,definitiva:x.definitiva,creditos:x.creditos}));
+  if(!todasEntradas.length)return null; const rp=calcularPromedioPonderado(todasEntradas.filter(x=>Number(x.creditos)>0)); return rp?rp.promedio:null;
 }
 
 /* Normalidad académica:
@@ -1002,6 +1088,7 @@ function inicializarDatos(){
 Promise.all([
   sincronizarUsuariosDesdeSupabase(),
   sincronizarProgramasDesdeSupabase(),
+  sincronizarHorariosDesdeSupabase(),
   sincronizarGruposDesdeSupabase(),
   sincronizarMatriculasNotasDesdeSupabase(),
   sincronizarActasEvaluacionHistorialDesdeSupabase(),
@@ -1274,28 +1361,7 @@ function login(){
 
   let valido=false, sesion=null;
 
-  /* V65 — Las cuentas de servicio se autentican por usuario/contraseña,
-     independientemente de la tarjeta de rol seleccionada. Esto evita que
-     Tesorería/Biblioteca hereden el dashboard del rol anterior. */
-  const cuentasServicioV65 = [
-    {usuario:"biblio", password:"1", rol:"biblioteca", nombre:"Bibliotecario UAN"},
-    {usuario:"tesoreria", password:"1", rol:"tesoreria", nombre:"Tesorería UAN"}
-  ];
-  const servicioV65 = cuentasServicioV65.find(c=>c.usuario===u && c.password===p);
-
-  if(servicioV65){
-    valido=true;
-    sesion={
-      rol:servicioV65.rol,
-      programa:null,
-      usuario:servicioV65.usuario,
-      codigo:servicioV65.usuario,
-      nombre:servicioV65.nombre,
-      esAdminCertificados:false
-    };
-  }
-
-  if(!valido && rolCard==="admin"){
+  if(rolCard==="admin"){
     const cuenta = getCuentasAdmin().find(c=>c.usuario===u && c.password===p);
     if(cuenta){
       valido=true;
@@ -1508,6 +1574,7 @@ async function sincronizarTodoSilencioso(){
     await Promise.all([
       sincronizarUsuariosDesdeSupabase(),
       sincronizarProgramasDesdeSupabase(),
+      sincronizarHorariosDesdeSupabase(),
       sincronizarGruposDesdeSupabase(),
       sincronizarMatriculasNotasDesdeSupabase(),
       sincronizarActasEvaluacionHistorialDesdeSupabase(),
@@ -1551,7 +1618,8 @@ function aplicarTemaRol(rol){
     estudiante:"rol-estudiante",
     admisiones:"rol-administrativo",
     director:"rol-administrativo",
-    coordinador:"rol-administrativo"
+    coordinador:"rol-administrativo",
+    decano:"rol-administrativo"
   };
   if(mapa[rol]) body.classList.add(mapa[rol]);
 }
@@ -1590,7 +1658,6 @@ function renderSidebar(){
         <div onclick="mostrarPanel('seguimiento')">Seguimiento Académico Docente</div>
       </div>
       <div class="menu-item" onclick="mostrarPanel('grado')">Trabajo de grado <span>›</span></div>
-      <div class="menu-item" onclick="renderCertificadosEstudiante()">📄 Certificados <span>›</span></div>
       <div class="menu-item" onclick="renderMisSolicitudesUAN()">🎫 Mis Solicitudes <span>›</span></div>
       <div class="menu-item" onclick="renderMensajeriaUAN()">✉️ Comunicaciones <span>›</span></div>
       <div class="menu-item" onclick="renderCalendarioUAN()">📅 Calendario Académico <span>›</span></div>
@@ -1615,7 +1682,6 @@ function renderSidebar(){
       <div class="menu-item" onclick="renderGestionAccesosAdmin()">🔐 Gestión de Usuarios y Accesos <span>›</span></div>
       <div class="menu-item" onclick="renderMensajeriaUAN()">✉️ Comunicaciones <span>›</span></div>
       <div class="menu-item" onclick="renderSolicitudesAdminUAN()">🎫 Solicitudes y Soporte <span>›</span></div>
-      <div class="menu-item" onclick="renderCertificadosAdminUAN()">📄 Certificados <span>›</span></div>
       <div class="menu-item" onclick="renderReportesUAN()">📊 Reportes <span>›</span></div>
       <div class="menu-item" onclick="renderAuditoriaUAN()">🛡️ Auditoría del Sistema <span>›</span></div>
       <div class="menu-item" onclick="renderCalendarioUAN()">📅 Calendario Académico <span>›</span></div>
@@ -1658,6 +1724,7 @@ function renderSidebar(){
       <div class="menu-item" onclick="renderVerGrupos()">Ver Grupos Programados <span>›</span></div>
       <div class="menu-item" onclick="renderGestionMatriculas()">Abrir / Cerrar Matrículas <span>›</span></div>
       <div class="menu-item" onclick="renderNotasCoordinador()">📝 Notas y correcciones <span>›</span></div>
+      <div class="menu-item" onclick="renderMigracionHistorialCoordinador()">🗂️ Organizar historial por semestre <span>›</span></div>
       <div class="menu-item" onclick="renderMonitoreoAcademico()">📈 Monitoreo académico <span>›</span></div>
       <div class="menu-item" onclick="renderAuditoriaNotas()">🕵️ Historial de cambios <span>›</span></div>
       <div class="menu-item" onclick="renderAuditoriaUAN()">🛡️ Auditoría del Sistema <span>›</span></div>
@@ -1669,6 +1736,22 @@ function renderSidebar(){
       <div class="menu-item" onclick="renderEstadoSincronizacion()">☁️ Estado de sincronización <span>›</span></div>
       <div class="menu-item" onclick="renderConfigActasCoordinador()">⏰ Fecha límite de actas <span>›</span></div>
       <div class="menu-item" onclick="renderInclusiones()">Inclusiones (cambios manuales) <span>›</span></div>
+    `;
+    renderHomeDashboard();
+  }
+  else if(usuarioActual.rol==="decano"){
+    rolTexto.textContent="Rol: Decano";
+    codigoTexto.textContent="";
+    nombreTexto.textContent="Decanatura";
+    document.getElementById("topbarUsuario").textContent = "👤 Decano";
+    menu.innerHTML=`
+      <div class="menu-item" onclick="renderHomeDashboard()">🏠 Inicio <span>›</span></div>
+      <div class="menu-item" onclick="renderTramitesAdminUAN()">🗂️ Trámites asignados <span>›</span></div>
+      <div class="menu-item" onclick="renderMensajeriaUAN()">✉️ Comunicaciones <span>›</span></div>
+      <div class="menu-item" onclick="renderCalendarioUAN()">📅 Calendario Académico <span>›</span></div>
+      <div class="menu-item" onclick="renderCentroAyudaUAN()">🆘 Centro de Ayuda <span>›</span></div>
+      <div class="menu-item" onclick="renderPerfilUAN()">👤 Mi Perfil <span>›</span></div>
+      <div class="menu-item" onclick="renderSeguridadUAN()">🔐 Seguridad <span>›</span></div>
     `;
     renderHomeDashboard();
   }
@@ -1735,25 +1818,6 @@ function construirAlertasDashboard(){
     if(pendientes.length) alertas.push({tipo:"warning",icon:"⏰",titulo:`${pendientes.length} acta(s) pendiente(s)`,texto:"Revisa los grupos que todavía no tienen acta publicada.",accion:"irDocente('notas')"});
     if(!grupos.length) alertas.push({tipo:"info",icon:"ℹ️",titulo:"Sin grupos asignados",texto:"No hay grupos asociados a tu usuario en el periodo actual.",accion:"irDocente('horario')"});
     if(!alertas.length) alertas.push({tipo:"success",icon:"✓",titulo:"Gestión al día",texto:"Tus grupos y actas no presentan pendientes prioritarios.",accion:"irDocente('notas')"});
-  }else if(rol==="biblioteca"){
-    menu.innerHTML=`
-      <div class="menu-item" onclick="renderHomeDashboard()">🏠 Inicio <span>›</span></div>
-      <div class="menu-item" onclick="renderBibliotecarioUAN()">📚 Gestión de Biblioteca <span>›</span></div>
-      <div class="menu-item" onclick="renderBibliotecaUAN()">📖 Catálogo <span>›</span></div>
-      <div class="menu-item" onclick="renderMensajeriaUAN()">✉️ Comunicaciones <span>›</span></div>
-      <div class="menu-item" onclick="renderCalendarioUAN()">📅 Calendario Académico <span>›</span></div>
-      <div class="menu-item" onclick="renderCentroAyudaUAN()">🆘 Centro de Ayuda <span>›</span></div>
-      <div class="menu-item" onclick="mostrarPanel('password')">🔑 Cambiar Contraseña <span>›</span></div>`;
-    renderHomeDashboard();
-  }else if(rol==="tesoreria"){
-    menu.innerHTML=`
-      <div class="menu-item" onclick="renderHomeDashboard()">🏠 Inicio <span>›</span></div>
-      <div class="menu-item" onclick="renderTesoreriaUAN()">💰 Gestión Financiera <span>›</span></div>
-      <div class="menu-item" onclick="renderMensajeriaUAN()">✉️ Comunicaciones <span>›</span></div>
-      <div class="menu-item" onclick="renderCalendarioUAN()">📅 Calendario Académico <span>›</span></div>
-      <div class="menu-item" onclick="renderCentroAyudaUAN()">🆘 Centro de Ayuda <span>›</span></div>
-      <div class="menu-item" onclick="mostrarPanel('password')">🔑 Cambiar Contraseña <span>›</span></div>`;
-    renderHomeDashboard();
   }else if(rol==="admisiones"){
     const estudiantes=Object.values(getEstudiantes());
     const sinPrograma=estudiantes.filter(e=>!e.programa).length;
@@ -1852,11 +1916,33 @@ function renderHomeDashboard(){
       {icono:"✅", label:"Mi Asistencia", desc:"Consulta tu asistencia", accion:"mostrarPanel('asistencia')"},
       {icono:"📈", label:"Seguimiento Académico Docente", desc:"Consulta el seguimiento académico", accion:"mostrarPanel('seguimiento')"},
       {icono:"🎓", label:"Trabajo de grado", desc:"Gestiona información de tu trabajo de grado", accion:"mostrarPanel('grado')"},
-      {icono:"📄", label:"Certificados", desc:"Solicita y consulta certificados", accion:"renderCertificadosEstudiante()"},
+      {icono:"🗂️", label:"Trámites", desc:"Solicita trámites y certificados", accion:"renderTramitesUAN()"},
       {icono:"🎫", label:"Mis Solicitudes", desc:"Consulta solicitudes y trámites", accion:"renderMisSolicitudesUAN()"},
       {icono:"✉️", label:"Comunicaciones", desc:"Consulta comunicaciones institucionales", accion:"renderMensajeriaUAN()"},
       {icono:"📆", label:"Calendario Académico", desc:"Consulta fechas académicas importantes", accion:"renderCalendarioUAN()"},
-      {icono:"🆘", label:"Centro de Ayuda", desc:"Solicita soporte y orientación", accion:"renderCentroAyudaUAN()"}
+      {icono:"🆘", label:"Centro de Ayuda", desc:"Solicita soporte y orientación", accion:"renderCentroAyudaUAN()"},
+      {icono:"👤", label:"Mi Perfil", desc:"Consulta y actualiza tu perfil", accion:"renderPerfilUAN()"},
+      {icono:"🔐", label:"Seguridad", desc:"Protege tu acceso institucional", accion:"renderSeguridadUAN()"},
+      {icono:"🎓", label:"Seguimiento académico", desc:"Consulta tus seguimientos", accion:"renderSeguimientoEstudianteV66()"}
+    ];
+  }
+  else if(rol === "decano"){
+    bienvenida = "¡Bienvenido, Decanatura!";
+    subtitulo = "Gestiona los trámites institucionales que requieren decisión de la Decanatura.";
+    const asignados = typeof window.uanTramitesAsignadosActual === "function" ? window.uanTramitesAsignadosActual() : [];
+    const pendientes = asignados.filter(t=>["Radicado","En revisión","En proceso"].includes(t.estado)).length;
+    stats = [
+      {icon:"🗂️", label:"TRÁMITES ASIGNADOS", value:asignados.length, note:"Solo Decanatura", tone:"blue"},
+      {icon:"◷", label:"PENDIENTES", value:pendientes, note:"Por atender", tone:"orange"},
+      {icon:"✓", label:"APROBADOS", value:asignados.filter(t=>t.estado==="Aprobado").length, note:"Gestionados", tone:"green"},
+      {icon:"✎", label:"FIRMA", value:"Activa", note:"Firma digital institucional", tone:"purple"}
+    ];
+    tiles = [
+      {icono:"🗂️", label:"Trámites asignados", desc:"Solo solicitudes dirigidas a Decanatura", accion:"renderTramitesAdminUAN()"},
+      {icono:"✉️", label:"Comunicaciones", desc:"Gestiona comunicaciones institucionales", accion:"renderMensajeriaUAN()"},
+      {icono:"📅", label:"Calendario Académico", desc:"Consulta fechas institucionales", accion:"renderCalendarioUAN()"},
+      {icono:"👤", label:"Mi Perfil", desc:"Consulta tu perfil institucional", accion:"renderPerfilUAN()"},
+      {icono:"🔐", label:"Seguridad", desc:"Protege tu acceso", accion:"renderSeguridadUAN()"}
     ];
   }
   else if(rol === "docente"){
@@ -1890,41 +1976,9 @@ function renderHomeDashboard(){
       {icono:"✉️", label:"Comunicaciones", desc:"Consulta comunicaciones institucionales", accion:"renderMensajeriaUAN()"},
       {icono:"📅", label:"Calendario Académico", desc:"Consulta fechas académicas", accion:"renderCalendarioUAN()"},
       {icono:"🆘", label:"Centro de Ayuda", desc:"Solicita soporte y orientación", accion:"renderCentroAyudaUAN()"},
-      {icono:"🔑", label:"Cambiar Contraseña", desc:"Actualiza tu acceso", accion:"irDocente('password')"}
-    ];
-  }
-  else if(rol === "biblioteca"){
-    bienvenida = "¡Bienvenido, Bibliotecario UAN!";
-    subtitulo = "Gestiona el catálogo, préstamos, devoluciones y reservas.";
-    stats = [
-      {icon:"📚", label:"CATÁLOGO", value:"—", note:"Recursos disponibles", tone:"blue"},
-      {icon:"🤝", label:"PRÉSTAMOS", value:"—", note:"Activos", tone:"green"},
-      {icon:"⏱", label:"VENCIDOS", value:"—", note:"Por revisar", tone:"orange"},
-      {icon:"▣", label:"RESERVAS", value:"—", note:"Pendientes", tone:"purple"}
-    ];
-    tiles = [
-      {icono:"📚", label:"Gestión de Biblioteca", desc:"Catálogo, préstamos y devoluciones", accion:"renderBibliotecarioUAN()"},
-      {icono:"📅", label:"Calendario Académico", desc:"Consulta fechas institucionales", accion:"renderCalendarioUAN()"},
-      {icono:"✉️", label:"Comunicaciones", desc:"Consulta comunicaciones", accion:"renderMensajeriaUAN()"},
-      {icono:"🆘", label:"Centro de Ayuda", desc:"Soporte y orientación", accion:"renderCentroAyudaUAN()"},
-      {icono:"🔑", label:"Cambiar Contraseña", desc:"Actualiza tu acceso", accion:"mostrarPanel('password')"}
-    ];
-  }
-  else if(rol === "tesoreria"){
-    bienvenida = "¡Bienvenido a Tesorería!";
-    subtitulo = "Gestiona obligaciones, pagos y comprobantes de los estudiantes.";
-    stats = [
-      {icon:"💰", label:"PAGOS", value:"—", note:"Registrados", tone:"green"},
-      {icon:"◷", label:"PENDIENTES", value:"—", note:"Por confirmar", tone:"orange"},
-      {icon:"✓", label:"CONFIRMADOS", value:"—", note:"Pagos verificados", tone:"blue"},
-      {icon:"▣", label:"COMPROBANTES", value:"—", note:"Emitidos", tone:"purple"}
-    ];
-    tiles = [
-      {icono:"💰", label:"Gestión Financiera", desc:"Revisar y confirmar pagos", accion:"renderTesoreriaUAN()"},
-      {icono:"📅", label:"Calendario Académico", desc:"Consulta fechas institucionales", accion:"renderCalendarioUAN()"},
-      {icono:"✉️", label:"Comunicaciones", desc:"Consulta comunicaciones", accion:"renderMensajeriaUAN()"},
-      {icono:"🆘", label:"Centro de Ayuda", desc:"Soporte y orientación", accion:"renderCentroAyudaUAN()"},
-      {icono:"🔑", label:"Cambiar Contraseña", desc:"Actualiza tu acceso", accion:"mostrarPanel('password')"}
+      {icono:"🔑", label:"Cambiar Contraseña", desc:"Actualiza tu acceso", accion:"irDocente('password')"},
+      {icono:"👤", label:"Mi Perfil", desc:"Consulta tu perfil institucional", accion:"renderPerfilUAN()"},
+      {icono:"🔐", label:"Seguridad", desc:"Protege tu acceso institucional", accion:"renderSeguridadUAN()"}
     ];
   }
   else if(rol === "admisiones"){
@@ -1949,8 +2003,8 @@ function renderHomeDashboard(){
       {icono:"👥", label:"Lista de Estudiantes", desc:"Ver y gestionar estudiantes", accion:"renderListaEstudiantes()"},
       {icono:"🔐", label:"Gestión de Usuarios y Accesos", desc:"Cambiar usuarios, códigos y contraseñas", accion:"renderGestionAccesosAdmin()"},
       {icono:"✉️", label:"Comunicaciones", desc:"Gestionar mensajes institucionales", accion:"renderMensajeriaUAN()"},
-      {icono:"🎫", label:"Solicitudes y Soporte", desc:"Revisar solicitudes de usuarios", accion:"renderSolicitudesAdminUAN()"},
-      {icono:"📄", label:"Certificados", desc:"Gestionar certificados académicos", accion:"renderCertificadosAdminUAN()"},
+      {icono:"🗂️", label:"Trámites asignados", desc:"Atender únicamente los trámites de tu oficina", accion:"renderTramitesAdminUAN()"},
+
       {icono:"📊", label:"Reportes", desc:"Consultar reportes administrativos", accion:"renderReportesUAN()"},
       {icono:"🛡️", label:"Auditoría del Sistema", desc:"Revisar actividad y trazabilidad", accion:"renderAuditoriaUAN()"},
       {icono:"📅", label:"Calendario Académico", desc:"Consultar y gestionar fechas institucionales", accion:"renderCalendarioUAN()"},
@@ -1982,7 +2036,9 @@ function renderHomeDashboard(){
       {icono:"📅", label:"Calendario Académico", desc:"Consulta fechas institucionales", accion:"renderCalendarioUAN()"},
       {icono:"🆘", label:"Centro de Ayuda", desc:"Gestiona soporte y orientación", accion:"renderCentroAyudaUAN()"},
       {icono:"🔀", label:"Docentes de Otras Carreras", desc:"Gestiona docentes invitados", accion:"renderDocentesInvitados()"},
-      {icono:"⭐", label:"Materias Electivas", desc:"Administra la oferta electiva", accion:"renderElectivas()"}
+      {icono:"⭐", label:"Materias Electivas", desc:"Administra la oferta electiva", accion:"renderElectivas()"},
+      {icono:"👤", label:"Mi Perfil", desc:"Consulta tu perfil institucional", accion:"renderPerfilUAN()"},
+      {icono:"🔐", label:"Seguridad", desc:"Protege tu acceso institucional", accion:"renderSeguridadUAN()"}
     ];
   }
   else if(rol === "coordinador"){
@@ -2003,12 +2059,13 @@ function renderHomeDashboard(){
       {icono:"👥", label:"Ver Grupos Programados", desc:"Consulta los grupos programados", accion:"renderVerGrupos()"},
       {icono:"🔓", label:"Abrir / Cerrar Matrículas", desc:"Gestiona el periodo de matrícula", accion:"renderGestionMatriculas()"},
       {icono:"📝", label:"Notas y correcciones", desc:"Corrige notas como Coordinación", accion:"renderNotasCoordinador()"},
+      {icono:"🗂️", label:"Organizar historial por semestre", desc:"Asigna las notas históricas a su periodo real", accion:"renderMigracionHistorialCoordinador()"},
       {icono:"📈", label:"Monitoreo académico", desc:"Condicionales, PFU y promedios", accion:"renderMonitoreoAcademico()"},
       {icono:"🕵️", label:"Historial de cambios", desc:"Trazabilidad de notas", accion:"renderAuditoriaNotas()"},
       {icono:"🛡️", label:"Auditoría del Sistema", desc:"Revisa actividad del sistema", accion:"renderAuditoriaUAN()"},
       {icono:"📊", label:"Reportes", desc:"Consulta reportes académicos", accion:"renderReportesUAN()"},
       {icono:"✉️", label:"Comunicaciones", desc:"Gestiona comunicaciones institucionales", accion:"renderMensajeriaUAN()"},
-      {icono:"🎫", label:"Solicitudes y Soporte", desc:"Revisa solicitudes y soporte", accion:"renderSolicitudesAdminUAN()"},
+      {icono:"🗂️", label:"Trámites asignados", desc:"Revisa únicamente los trámites de Coordinación", accion:"renderTramitesAdminUAN()"},
       {icono:"📅", label:"Calendario Académico", desc:"Consulta fechas académicas", accion:"renderCalendarioUAN()"},
       {icono:"🆘", label:"Centro de Ayuda", desc:"Gestiona soporte y orientación", accion:"renderCentroAyudaUAN()"},
       {icono:"☁️", label:"Estado de sincronización", desc:"Revisa Supabase y pendientes", accion:"renderEstadoSincronizacion()"},
@@ -2051,6 +2108,113 @@ function toggleSidebarMobile(){
   document.querySelector(".sidebar").classList.toggle("mostrar-movil");
 }
 
+
+/* ======================================================================
+   COORDINACIÓN — MIGRACIÓN DEL HISTORIAL ACADÉMICO POR SEMESTRE
+   Solo el Coordinador Académico puede clasificar notas históricas que
+   todavía no tienen periodo. No se inventan notas: se conserva la nota,
+   créditos, estado, grupo y docente y únicamente se añade el periodo real.
+   ====================================================================== */
+function historialLegacyParaMigrar(codigo){
+  const h=getHistorial()[codigo]||{};
+  return Object.entries(h).filter(([materia,r])=>{
+    if(materia==="__periodos" || !r || typeof r!=="object" || r.definitiva===undefined) return false;
+    return !r.periodos || Object.keys(r.periodos).length===0;
+  }).map(([materia,r])=>({materia, ...r}));
+}
+
+function periodosMigracionOpciones(){
+  const base=["2025-1","2025-2","2026-1","2026-2"];
+  const extras=[];
+  try{
+    Object.values(getHistorial()).forEach(h=>Object.values(h||{}).forEach(r=>{
+      if(r&&r.periodos) Object.keys(r.periodos).forEach(p=>{if(!base.includes(p)&&!extras.includes(p))extras.push(p);});
+    }));
+  }catch(e){}
+  return [...base,...extras.sort().reverse()];
+}
+
+function renderMigracionHistorialCoordinador(codigoSeleccionado){
+  if(usuarioActual?.rol!=="coordinador"){
+    alert("Esta función está disponible únicamente para Coordinación Académica.");
+    return;
+  }
+  const estudiantes=Object.values(getEstudiantes()).filter(e=>e && e.programa===usuarioActual.programa).sort((a,b)=>String(a.nombre||"").localeCompare(String(b.nombre||"")));
+  if(!estudiantes.length){
+    document.getElementById("contenido").innerHTML=`<section class="uan-module-shell"><div class="uan-module-hero"><span>COORDINACIÓN ACADÉMICA · HISTORIAL</span><h1>Organizar historial por semestre</h1><p>No hay estudiantes registrados en el programa ${escAttr(usuarioActual.programa||"")}.</p></div></section>`;
+    return;
+  }
+  const codigo=codigoSeleccionado || estudiantes[0].codigo;
+  const e=estudiantes.find(x=>x.codigo===codigo)||estudiantes[0];
+  const pendientes=historialLegacyParaMigrar(e.codigo);
+  const periodos=periodosMigracionOpciones();
+  const opciones=periodos.map(p=>`<option value="${escAttr(p)}">${escAttr(p)}</option>`).join("");
+  const filas=pendientes.map((r,i)=>`<tr>
+      <td style="text-align:left"><b>${escAttr(r.materia)}</b><small style="display:block;color:#718078">${Number(r.creditos)||0} créditos${r.grupo?" · "+escAttr(r.grupo):""}</small></td>
+      <td><b>${Number(r.definitiva).toFixed(1)}</b></td>
+      <td><select id="migPeriodo_${i}">${opciones}</select></td>
+    </tr>`).join("");
+  document.getElementById("contenido").innerHTML=`
+    <div class="uan-module-shell">
+      <div class="uan-module-hero">
+        <span>COORDINACIÓN ACADÉMICA · HISTORIAL ACADÉMICO</span>
+        <h1>Organizar historial por semestre</h1>
+        <p>Clasifica las notas históricas que todavía no tienen periodo. Esta acción conserva la información original y únicamente agrega el semestre real.</p>
+      </div>
+      <section class="uan-card">
+        <div style="display:flex;gap:14px;align-items:end;flex-wrap:wrap">
+          <div style="min-width:320px;flex:1"><label>Estudiante</label><select id="migEstudiante" onchange="renderMigracionHistorialCoordinador(this.value)">${estudiantes.map(x=>`<option value="${escAttr(x.codigo)}" ${x.codigo===e.codigo?'selected':''}>${escAttr(x.nombre)} · ${escAttr(x.codigo)}</option>`).join("")}</select></div>
+          <div class="uan-pill">Programa: ${escAttr(e.programa||"—")}</div>
+        </div>
+      </section>
+      <section class="uan-card">
+        <span class="uan-card-kicker">NOTAS SIN SEMESTRE</span>
+        <h2>${escAttr(e.nombre||"")}</h2>
+        ${pendientes.length?`<p style="color:#718078">Selecciona el periodo real de cada asignatura. Luego pulsa <b>Guardar historial</b>.</p>
+        <div style="overflow:auto"><table><tr><th>Asignatura</th><th>Definitiva</th><th>Periodo real</th></tr>${filas}</table></div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px"><button onclick="guardarMigracionHistorialCoordinador('${escAttr(e.codigo)}',${pendientes.length})">💾 Guardar historial</button><span style="font-size:12px;color:#718078">${pendientes.length} asignatura(s) pendientes de clasificar</span></div>`:
+        `<div class="uan-empty-state">✅ Este estudiante ya tiene todas sus notas históricas clasificadas por periodo.</div>`}
+      </section>
+      <section class="uan-card">
+        <span class="uan-card-kicker">IMPORTANTE</span>
+        <p style="margin:0;color:#475569">La Coordinación Académica es responsable de asignar el semestre real. El sistema no cambia la nota ni los créditos. Una vez clasificada, la asignatura aparecerá en el semestre correspondiente y será incluida correctamente en el promedio semestral y en el promedio ponderado acumulado.</p>
+      </section>
+    </div>`;
+}
+
+function guardarMigracionHistorialCoordinador(codigo,cantidad){
+  if(usuarioActual?.rol!=="coordinador") return;
+  const estudiantes=getEstudiantes();
+  const e=estudiantes[codigo];
+  if(!e || e.programa!==usuarioActual.programa){ alert("Solo puedes organizar el historial de estudiantes de tu programa."); return; }
+  const historial=getHistorial();
+  const h=historial[codigo]||{};
+  const filasPendientes=historialLegacyParaMigrar(codigo);
+  let cambios=0;
+  for(let i=0;i<cantidad;i++){
+    const materiaEl=document.querySelector(`#migPeriodo_${i}`);
+    if(!materiaEl) continue;
+    const periodo=String(materiaEl.value||"").trim();
+    const r=filasPendientes[i];
+    if(!r || !periodo) continue;
+    const original=h[r.materia];
+    if(!original) continue;
+    const copia={...original,periodo};
+    delete copia.periodos;
+    original.periodos={...(original.periodos||{}),[periodo]:{...copia}};
+    // El registro superior se conserva para compatibilidad con módulos que
+    // consultan si una asignatura fue aprobada, pero ya no se interpreta como 2026-2.
+    h[r.materia]=original;
+    cambios++;
+  }
+  historial[codigo]=h;
+  saveHistorial(historial);
+  const auditoria=JSON.parse(localStorage.getItem("uan_auditoria_historial")||"[]");
+  auditoria.unshift({fecha:new Date().toLocaleString("es-CO"),actor:usuarioActual.usuario||"coordinador",programa:usuarioActual.programa||"",codigo,estudiante:e.nombre||"",accion:"Clasificación de historial por periodo",detalle:`${cambios} asignatura(s) clasificadas`});
+  localStorage.setItem("uan_auditoria_historial",JSON.stringify(auditoria.slice(0,500)));
+  alert(cambios?`✅ Historial actualizado: ${cambios} asignatura(s) quedaron asociadas a su semestre.`:"No se realizaron cambios.");
+  renderMigracionHistorialCoordinador(codigo);
+}
 
 /* ======================================================================
    COORDINACIÓN — NOTAS, CORRECCIONES Y FECHA LÍMITE DE ACTAS
@@ -2399,6 +2563,7 @@ function renderCrearCuentaAdmin(mensaje){
         <select id="ca_rol">
           <option value="director">Director de Escuela</option>
           <option value="coordinador">Coordinador Académico</option>
+          <option value="decano">Decano</option>
         </select>
       </div>
       <div>
@@ -2419,8 +2584,8 @@ function guardarCuentaAdmin(){
   const usuario = document.getElementById("ca_usuario").value.trim();
   const password = document.getElementById("ca_password").value.trim();
 
-  if(!programa || !usuario || !password){
-    renderCrearCuentaAdmin(`<span style="color:#a83232">⚠ Carrera, usuario y contraseña son obligatorios.</span>`);
+  if((rol !== "decano" && !programa) || !usuario || !password){
+    renderCrearCuentaAdmin(`<span style="color:#a83232">⚠ ${rol === "decano" ? "Usuario y contraseña" : "Carrera, usuario y contraseña"} son obligatorios.</span>`);
     return;
   }
 
@@ -2529,11 +2694,11 @@ function borronYCuentaNueva(){
 
 function renderListaCuentasAdmin(){
   const cuentas = getCuentasAdmin().map((c,i)=>({...c, idx:i}));
-  const directoresYCoordinadores = cuentas.filter(c=>c.rol==="director" || c.rol==="coordinador");
+  const directoresYCoordinadores = cuentas.filter(c=>c.rol==="director" || c.rol==="coordinador" || c.rol==="decano");
 
   let filas = directoresYCoordinadores.map(c=>`
     <tr>
-      <td>${c.rol==='director'?'Director de Escuela':'Coordinador Académico'}</td>
+      <td>${c.rol==='director'?'Director de Escuela':(c.rol==='coordinador'?'Coordinador Académico':'Decano')}</td>
       <td>${c.programa}</td>
       <td>${c.usuario}</td>
       <td class="acciones"><button class="btn-peligro" onclick="eliminarCuentaAdmin(${c.idx})">Eliminar</button></td>
@@ -2542,9 +2707,9 @@ function renderListaCuentasAdmin(){
   if(!filas) filas = `<tr><td colspan="4">Aún no has creado Directores ni Coordinadores.</td></tr>`;
 
   document.getElementById("contenido").innerHTML=`
-    <h2 class="panel-title">Directores / Coordinadores</h2>
+    <h2 class="panel-title">Directivos Académicos</h2>
     <table>
-      <tr><th>Rol</th><th>Carrera</th><th>Usuario</th><th>Acciones</th></tr>
+      <tr><th>Rol</th><th>Carrera / Facultad</th><th>Usuario</th><th>Acciones</th></tr>
       ${filas}
     </table>
   `;
@@ -2579,7 +2744,9 @@ function textoRolAcceso(c){
   if(c.tipo === "docente") return "Docente";
   if(c.rol === "director") return "Director de Escuela";
   if(c.rol === "coordinador") return "Coordinador Académico";
+  if(c.rol === "decano") return "Decano";
   if(c.rol === "admisiones") return "Administrativo / Admisiones";
+  if(c.rol === "decano") return "Decano";
   return c.rol || "Usuario";
 }
 
@@ -5201,41 +5368,22 @@ function tablaPromedio(titulo, entradas){
 }
 
 function renderPromedioEstudiante(){
-  const e = getEstudiantes()[usuarioActual.codigo];
-  const historial = getHistorial()[e.codigo] || {};
-  const registro = getMatriculas()[e.codigo];
-  const materiasSemestreActual = (registro && registro.materias) ? Object.keys(registro.materias) : [];
-
-  const todasEntradas = Object.keys(historial).map(materia=>({
-    materia,
-    definitiva: historial[materia].definitiva,
-    creditos: historial[materia].creditos
-  }));
-
-  const entradasSemestre = todasEntradas.filter(en => materiasSemestreActual.includes(en.materia));
-
-  document.getElementById("contenido").innerHTML = `
-    <h2 class="panel-title">Calcular Promedio Final Periodo</h2>
-    <p style="font-size:13px;color:#666">
-      Promedio Ponderado = Σ(Nota Definitiva × Créditos de la materia) ÷ Σ(Créditos cursados).
-      Solo se incluyen materias con actas ya subidas por el docente.
-    </p>
-    ${tablaPromedio("Promedio Ponderado del Periodo (semestre actual)", entradasSemestre)}
-    <hr style="margin:20px 0;border:none;border-top:1px solid #ddd">
-    ${tablaPromedio("Promedio Ponderado Acumulado (toda tu carrera)", todasEntradas)}
-    ${(()=>{ const s = calcularSituacionAcademica(e.codigo, e.programa);
-      const n = s.normalidad || {estado:"Normal"};
-      let avisoNormalidad = "";
-      if(n.estado==="PFU"){
-        avisoNormalidad = `<div class="aviso aviso-error" style="margin-top:15px">🚫 Estás <b>por fuera de la universidad (PFU)</b> por bajo rendimiento académico sostenido.</div>`;
-      } else if(n.estado==="Condicional"){
-        avisoNormalidad = `<div class="aviso aviso-error" style="margin-top:15px">⚠️ Estás en <b>condición académica CONDICIONAL</b> (semestre ${n.semestresCondicional} de 3 permitidos) — tu promedio acumulado está por debajo de 3.2.</div>`;
-      }
-      const avisoBono = (s.bono>0)
-        ? `<div class="aviso" style="margin-top:15px">🎉 Tu promedio acumulado es superior a 3.6: tienes <b>${s.bono} créditos de bono</b> para adelantar materias del siguiente nivel en tu próxima matrícula.</div>`
-        : ``;
-      return avisoNormalidad + avisoBono; })()}
-  `;
+  const e=getEstudiantes()[usuarioActual.codigo];
+  const periodos=getPeriodosDisponibles(e.codigo);
+  const todas=entradasHistorialTodasPeriodos(e.codigo);
+  const acumulado=calcularPromedioPonderado(todas.filter(x=>Number(x.creditos)>0).map(x=>({materia:`${x.periodo} · ${x.materia}`,definitiva:x.definitiva,creditos:x.creditos})));
+  const bloques=periodos.map(periodo=>{
+    const entradas=entradasHistorialPeriodo(e.codigo,periodo);
+    if(!entradas.length)return `<section class="uan-card"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><span class="uan-card-kicker">HISTORIAL ACADÉMICO</span><h2>${escAttr(periodo)}</h2></div><span class="uan-pill">Sin notas definitivas</span></div><div class="uan-empty-state">No hay calificaciones definitivas registradas para este periodo.</div></section>`;
+    const r=calcularPromedioPonderado(entradas.filter(x=>Number(x.creditos)>0));
+    return `<section class="uan-card"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><span class="uan-card-kicker">HISTORIAL ACADÉMICO</span><h2>Periodo ${escAttr(periodo)}</h2></div><div style="text-align:right"><small style="display:block;color:#718078">Promedio semestral</small><b style="font-size:24px;color:var(--clean-green,#14532d)">${r?r.promedio.toFixed(2):"—"}</b></div></div>${tablaPromedio(`Asignaturas · ${periodo}`,entradas)}</section>`;
+  }).join("");
+  document.getElementById("contenido").innerHTML=`
+    <div class="uan-module-shell">
+      <div class="uan-module-hero"><span>CONSULTA ACADÉMICA · HISTORIAL</span><h1>Promedio ponderado</h1><p>Consulta tus asignaturas por semestre, el promedio de cada periodo y el promedio ponderado acumulado de toda la carrera.</p></div>
+      <section class="uan-card"><div style="display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap"><div><span class="uan-card-kicker">RESUMEN ACADÉMICO</span><h2>Promedio ponderado acumulado</h2><p style="margin:0;color:#718078">Se calcula con todas las asignaturas definitivas registradas en los periodos disponibles.</p></div><b style="font-size:32px;color:var(--clean-green,#14532d)">${acumulado?acumulado.promedio.toFixed(2):"—"}</b></div></section>
+      ${bloques}
+    </div>`;
 }
 
 /* ======================================================================
@@ -6507,26 +6655,17 @@ async function intentarPublicarHistorial(programaNombre, materia, codigo){
     docenteLabel = g ? g.docente : "";
   }
 
-  const entradaHistorial = {
-    creditos: creditosMateria,
-    definitiva: parseFloat(definitivaFinal.toFixed(1)),
-    aprobada: aprobadaFinal,
-    grupo: grupoLabel,
-    docente: docenteLabel
-  };
-
-  const historial = getHistorial();
-  if(!historial[codigo]) historial[codigo] = {};
-  historial[codigo][materia] = entradaHistorial;
+  const entradaHistorial = {creditos:creditosMateria,definitiva:parseFloat(definitivaFinal.toFixed(1)),aprobada:aprobadaFinal,grupo:grupoLabel,docente:docenteLabel,periodo:UAN_PERIODO_ACTUAL};
+  const historial=getHistorial(); if(!historial[codigo])historial[codigo]={};
+  const anterior=historial[codigo][materia]&&typeof historial[codigo][materia]==="object"?historial[codigo][materia]:{};
+  historial[codigo][materia]={...entradaHistorial,periodos:{...(anterior.periodos||{}),[UAN_PERIODO_ACTUAL]:{...entradaHistorial}}};
 
   // Si este curso llenaba un cupo de electiva del pensum, la nota también se refleja
   // ahí (con el nombre del curso real entre paréntesis) para que el cupo cuente como
   // aprobado y el estudiante pueda avanzar de nivel.
   if(slotDeElectiva){
-    historial[codigo][slotDeElectiva] = {
-      ...entradaHistorial,
-      cursoElegido: materia
-    };
+    const anteriorSlot=historial[codigo][slotDeElectiva]&&typeof historial[codigo][slotDeElectiva]==="object"?historial[codigo][slotDeElectiva]:{};
+    historial[codigo][slotDeElectiva]={...entradaHistorial,cursoElegido:materia,periodos:{...(anteriorSlot.periodos||{}),[UAN_PERIODO_ACTUAL]:{...entradaHistorial,cursoElegido:materia}}};
   }
 
   localStorage.setItem("uan_historial_academico", JSON.stringify(historial));
@@ -6616,7 +6755,7 @@ function reabrirActas(grupoId){
     abrirModal(`<div class="status-modal"><h2>Acta protegida</h2><p>El acta solo puede reabrirse por Coordinación o por el docente responsable mientras la fecha límite siga vigente.</p></div>`);
     return;
   }
-  pedirConfirmacion("¿Reabrir las actas de este grupo para corregir notas? El estudiante seguirá viendo la última nota oficial hasta que subas actas de nuevo.", async function(){ 
+  pedirConfirmacion("¿Reabrir las actas de este grupo para corregir notas? El estudiante seguirá viendo la última nota oficial hasta que subas actas de nuevo.", async function(){
     const actas = getActas();
     const versionActual = obtenerVersionActa(grupoId);
     guardarActaMeta(grupoId,{estado:"REABIERTA",reabiertaAt:new Date().toISOString(),reabiertaPor:usuarioActual?.nombre||usuarioActual?.usuario||"Usuario"});
@@ -8716,7 +8855,7 @@ function renderMisSolicitudesUAN(){
   document.getElementById("contenido").innerHTML=`<div class="uan-module-shell"><div class="uan-module-hero"><span>SOPORTE · SEGUIMIENTO</span><h1>Mis Solicitudes</h1><p>Consulta el estado de tus solicitudes de soporte y servicios.</p></div><div class="uan-ticket-list">${arr.map(t=>`<article class="uan-ticket-card"><b>${escAttr(t.id)}</b><h3>${escAttr(t.asunto)}</h3><p>${escAttr(t.descripcion)}</p><span class="uan-pill">${escAttr(t.estado)}</span><small>${escAttr(t.fecha)} · ${escAttr(t.categoria)}</small></article>`).join("")||`<div class="uan-empty-state">No tienes solicitudes registradas.</div>`}</div></div>`;
 }
 function uanAbrirSoporte(){
-  abrirModal(`<div class="status-modal"><div class="status-modal-kicker">SOPORTE UAN</div><h2>Nueva solicitud</h2><p>Describe el problema sin compartir contraseñas.</p><select id="uanSoporteCat"><option>Problemas de acceso</option><option>Problema académico</option><option>Matrícula / pagos</option><option>Datos personales</option><option>Problema técnico</option><option>Certificados</option><option>Otro</option></select><select id="uanSoportePrioridad"><option>Normal</option><option>Alta</option><option>Urgente</option></select><input id="uanSoporteAsunto" placeholder="Asunto"><textarea id="uanSoporteTexto" style="width:100%;min-height:130px" placeholder="Describe el inconveniente..."></textarea><button onclick="uanGuardarSoporte()">Registrar solicitud</button></div>`);
+  abrirModal(`<div class="status-modal"><div class="status-modal-kicker">SOPORTE UAN</div><h2>Nueva solicitud</h2><p>Describe el problema sin compartir contraseñas.</p><select id="uanSoporteCat"><option>Problemas de acceso</option><option>Problema académico</option><option>Matrícula académica</option><option>Datos personales</option><option>Problema técnico</option><option>Certificados</option><option>Otro</option></select><select id="uanSoportePrioridad"><option>Normal</option><option>Alta</option><option>Urgente</option></select><input id="uanSoporteAsunto" placeholder="Asunto"><textarea id="uanSoporteTexto" style="width:100%;min-height:130px" placeholder="Describe el inconveniente..."></textarea><button onclick="uanGuardarSoporte()">Registrar solicitud</button></div>`);
 }
 function uanGuardarSoporte(){
   const desc=document.getElementById("uanSoporteTexto")?.value.trim(), asunto=document.getElementById("uanSoporteAsunto")?.value.trim(), categoria=document.getElementById("uanSoporteCat")?.value||"Otro", prioridad=document.getElementById("uanSoportePrioridad")?.value||"Normal";
@@ -8816,34 +8955,29 @@ function uanAprobarCertificado(id){
   c.version=Number(c.version||0)+1;
 
   uanSaveCerts(a);
+  try{
+    const allT=uanLeerLS("uan_tramites_v58",{});
+    Object.keys(allT).forEach(k=>{(allT[k]||[]).forEach(t=>{if(t.tramiteId===c.tramiteId || (t.esCertificado && t.owner===c.owner && t.tipo===c.tipo && t.periodo===c.periodo && t.estado!=="Aprobado")){t.estado="Aprobado";t.respuesta="Certificado generado por Admisiones.";t.firmadoPorRol="admisiones";t.gestionadoPor=usuarioActual.usuario;}})});
+    uanGuardarLS("uan_tramites_v58",allT);
+  }catch(e){}
   uanRegistrarAuditoria("Aprobación de certificado",c.tipo,id);
   uanCrearNotificacion(
     "Certificado generado",
     `${c.id} está disponible para el estudiante.`,
     "success",
-    "renderCertificadosEstudiante()",
+    "renderTramitesUAN()",
     [{value:c.owner,rol:"estudiante"}]
   );
-  renderCertificadosAdminUAN();
+  renderTramitesAdminUAN();
 }
 function mostrarMensajes(){
   const mails=uanMail().filter(m=>!m.toRole||m.toRole===usuarioActual?.rol||m.to===usuarioActual?.usuario||m.to===usuarioActual?.codigo).slice().reverse();
   const html=mails.map(m=>`<article class="uan-mail-card"><div><b>${escAttr(m.asunto)}</b><small>${escAttr(m.fecha)} · De: ${escAttr(m.from)}</small><p>${escAttr(m.mensaje)}</p></div><span class="uan-pill">${escAttr(m.estado||"Enviado")}</span></article>`).join("")||`<div class="uan-empty-state">No tienes mensajes nuevos.</div>`;
   abrirModal(`<div class="uan-notif-modal"><span class="uan-modal-kicker">COMUNICACIONES INSTITUCIONALES</span><h2>Mensajes</h2><p>Tu bandeja institucional.</p><div class="uan-mail-list">${html}</div><div class="uan-notif-actions"><button class="btn-secundario" onclick="cerrarModal();renderMensajeriaUAN()">Abrir Comunicaciones</button></div></div>`);
 }
-function uanNotasParaCertificado(codigo){
-  const historial=getHistorial()[codigo]||{};
-  const vistos=new Set();
-  const filas=[];
-  Object.entries(historial).forEach(([materia,r])=>{
-    if(!r || r.definitiva===undefined || r.definitiva===null) return;
-    const nota=parseFloat(r.definitiva);
-    if(isNaN(nota)) return;
-    const nombre=r.cursoElegido || materia;
-    if(vistos.has(nombre)) return;
-    vistos.add(nombre);
-    filas.push({materia:nombre,definitiva:nota,creditos:parseFloat(r.creditos)||0,aprobada:!!r.aprobada});
-  });
+function uanNotasParaCertificado(codigo,periodo){
+  const base=periodo?entradasHistorialPeriodo(codigo,periodo):entradasHistorialTodasPeriodos(codigo); const vistos=new Set(),filas=[];
+  base.forEach(r=>{const nota=parseFloat(r.definitiva); if(!Number.isFinite(nota))return; const nombre=r.cursoElegido||r.materia; if(vistos.has(nombre))return; vistos.add(nombre); filas.push({materia:nombre,definitiva:nota,creditos:parseFloat(r.creditos)||0,aprobada:!!r.aprobada});});
   return filas.sort((a,b)=>a.materia.localeCompare(b.materia));
 }
 function uanFirmasCertificado(){
@@ -8868,13 +9002,15 @@ function uanVerCertificado(id){
   if(!c)return;
 
   const esNotas=String(c.tipo||"").toLowerCase().includes("notas");
-  const notas=esNotas ? uanNotasParaCertificado(c.codigo||c.owner) : [];
+  const periodoCert=String(c.periodo||UAN_PERIODO_ACTUAL);
+  const notas=esNotas ? uanNotasParaCertificado(c.codigo||c.owner,periodoCert) : [];
   const promedio=esNotas ? calcularPromedioPonderado(notas.filter(x=>x.creditos>0)) : null;
+  const acumulado=esNotas ? calcularPromedioPonderado(entradasHistorialTodasPeriodos(c.codigo||c.owner).filter(x=>Number(x.creditos)>0).map(x=>({materia:`${x.periodo} · ${x.materia}`,definitiva:x.definitiva,creditos:x.creditos}))) : null;
   const tablaNotas=esNotas ? `
     <section class="uan-cert-notas">
       <h3>Detalle académico</h3>
       ${notas.length ? `<table><thead><tr><th>Asignatura</th><th>Nota definitiva</th><th>Créditos</th><th>Estado</th></tr></thead><tbody>${notas.map(n=>`<tr><td>${escAttr(n.materia)}</td><td>${n.definitiva.toFixed(1)}</td><td>${n.creditos||"—"}</td><td>${n.aprobada?"Aprobada":"Reprobada"}</td></tr>`).join("")}</tbody></table>
-      <div class="uan-cert-promedio"><span>Promedio ponderado acumulado</span><b>${promedio?promedio.promedio.toFixed(2):"—"}</b></div>` : `<div class="uan-empty-state">No hay notas definitivas registradas todavía para este estudiante.</div>`}
+      <div class="uan-cert-promedio"><span>Promedio ponderado del semestre ${escAttr(periodoCert)}</span><b>${promedio?promedio.promedio.toFixed(2):"—"}</b></div><div class="uan-cert-promedio"><span>Promedio ponderado acumulado</span><b>${acumulado?acumulado.promedio.toFixed(2):"—"}</b></div>` : `<div class="uan-empty-state">No hay notas definitivas registradas todavía para este estudiante.</div>`}
     </section>` : "";
 
   abrirModal(`<div class="uan-certificate">
@@ -8947,7 +9083,7 @@ setTimeout(actualizarBadgeNotificaciones,300);
     const a=uanCerts().filter(x=>String(x.id)!==String(id));
     uanSaveCerts(a);
     audit("Certificado eliminado","Solicitud de certificado",id);
-    renderCertificadosAdminUAN();
+    renderTramitesAdminUAN();
   };
 
   window.uanBorrarSolicitudReal=function(id){
@@ -8997,7 +9133,7 @@ setTimeout(actualizarBadgeNotificaciones,300);
   }
   function notifyOwner(c,title,text){
     try{
-      uanCrearNotificacion(title,text,"info","renderCertificadosEstudiante()",[{value:c.owner,rol:"estudiante"}]);
+      uanCrearNotificacion(title,text,"info","renderTramitesUAN()",[{value:c.owner,rol:"estudiante"}]);
     }catch(e){}
   }
 
@@ -9042,14 +9178,14 @@ setTimeout(actualizarBadgeNotificaciones,300);
     saveCert(c);
     uanRegistrarAuditoria("Edición de certificado",`${c.tipo} · ${c.id}`,c.id);
     cerrarModal();
-    renderCertificadosAdminUAN();
+    renderTramitesAdminUAN();
   };
 
   window.uanPrevisualizarCertificado=function(id){
     const c=getCert(id); if(!c)return;
     // Reutiliza el mismo generador oficial, pero con etiqueta de previsualización.
     const esNotas=String(c.tipo||"").toLowerCase().includes("notas");
-    const notas=esNotas ? uanNotasParaCertificado(c.codigo||c.owner) : [];
+    const notas=esNotas ? uanNotasParaCertificado(c.codigo||c.owner,String(c.periodo||UAN_PERIODO_ACTUAL)) : [];
     const promedio=esNotas && typeof calcularPromedioPonderado==="function"
       ? calcularPromedioPonderado(notas.filter(x=>x.creditos>0)) : null;
     const tabla=esNotas && notas.length ? `
@@ -9090,7 +9226,7 @@ setTimeout(actualizarBadgeNotificaciones,300);
     saveCert(c);
     uanRegistrarAuditoria("Rechazo de certificado",motivo,c.id);
     notifyOwner(c,"Certificado rechazado",`${c.id}: ${motivo}`);
-    renderCertificadosAdminUAN();
+    renderTramitesAdminUAN();
   };
 
   window.uanRegenerarCertificado=function(id){
@@ -9105,7 +9241,7 @@ setTimeout(actualizarBadgeNotificaciones,300);
     saveCert(c);
     uanRegistrarAuditoria("Regeneración de certificado",`Versión ${c.version}`,c.id);
     notifyOwner(c,"Certificado actualizado",`${c.id} fue regenerado y conserva su validez.`);
-    renderCertificadosAdminUAN();
+    renderTramitesAdminUAN();
   };
 
   window.uanAnularCertificado=function(id){
@@ -9122,7 +9258,7 @@ setTimeout(actualizarBadgeNotificaciones,300);
     saveCert(c);
     uanRegistrarAuditoria("Anulación de certificado",motivo,c.id);
     notifyOwner(c,"Certificado anulado",`${c.id} fue anulado por la oficina de Admisiones.`);
-    renderCertificadosAdminUAN();
+    renderTramitesAdminUAN();
   };
 
   window.uanReactivarCertificado=function(id){
@@ -9134,7 +9270,7 @@ setTimeout(actualizarBadgeNotificaciones,300);
     c.reactivadoEn=uanAhora();
     saveCert(c);
     uanRegistrarAuditoria("Reactivación de certificado","Solicitud reactivada para revisión",c.id);
-    renderCertificadosAdminUAN();
+    renderTramitesAdminUAN();
   };
 })();
 
@@ -9162,15 +9298,13 @@ setTimeout(actualizarBadgeNotificaciones,300);
 
 /* ================================================================
    UAN V58 — SUITE INSTITUCIONAL COMPLETA
-   Incluye: correo mejorado, trámites, perfil, biblioteca, finanzas,
+   Incluye: correo mejorado, trámites, perfil, seguridad,
    seguridad, calendario, dashboard y servicios transversales.
    NO incluye "Mi actividad" por decisión del proyecto.
    ================================================================ */
 (function(){
   const LS = {
     perfil:"uan_perfiles_v58",
-    biblioteca:"uan_biblioteca_v58",
-    finanzas:"uan_finanzas_v58",
     seguridad:"uan_seguridad_v58",
     tramites:"uan_tramites_v58"
   };
@@ -9226,59 +9360,6 @@ setTimeout(actualizarBadgeNotificaciones,300);
     renderPerfilUAN();
   };
 
-  /* ---------- BIBLIOTECA ---------- */
-  window.renderBibliotecaUAN=function(){
-    const base=[
-      ["BIB-001","Fundamentos de Ingeniería de Sistemas","Biblioteca Central","Disponible"],
-      ["BIB-002","Sistemas Operativos Modernos","Biblioteca Central","Disponible"],
-      ["BIB-003","Redes de Computadores","Biblioteca Central","Prestado"],
-      ["BIB-004","Simulación de Sistemas","Recursos digitales","Disponible"]
-    ];
-    const prestamos=read(LS.biblioteca,{})[who()]||[];
-    const q=(document.getElementById("v58BibSearch")?.value||"").toLowerCase();
-    const rows=base.filter(b=>!q||b.join(" ").toLowerCase().includes(q)).map(b=>{
-      const prest=prestamos.find(x=>x.id===b[0]);
-      return `<tr><td>${b[0]}</td><td><b>${escAttr(b[1])}</b></td><td>${escAttr(b[2])}</td><td><span class="uan-pill">${escAttr(prest?"Prestado":b[3])}</span></td><td>${prest?`<button class="btn-secundario" onclick="uanDevolverLibroV58('${b[0]}')">↩ Devolver</button>`:`<button onclick="uanPrestarLibroV58('${b[0]}')">📚 Solicitar</button>`}</td></tr>`;
-    }).join("");
-    document.getElementById("contenido").innerHTML=`
-      <div class="uan-module-shell">
-        <div class="uan-module-hero"><span>RECURSOS · BIBLIOTECA</span><h1>Biblioteca UAN</h1><p>Consulta material bibliográfico y administra tus préstamos.</p></div>
-        <section class="uan-card"><div class="uan-module-toolbar"><input id="v58BibSearch" oninput="renderBibliotecaUAN()" placeholder="Buscar libro o recurso..." value="${escAttr(q)}"><button class="btn-secundario" onclick="uanMostrarPrestamosV58()">📖 Mis préstamos</button></div>
-        <div class="uan-table-wrap"><table class="uan-table"><thead><tr><th>Código</th><th>Recurso</th><th>Ubicación</th><th>Estado</th><th>Acción</th></tr></thead><tbody>${rows||`<tr><td colspan="5">No se encontraron recursos.</td></tr>`}</tbody></table></div></section>
-      </div>`;
-  };
-  window.uanPrestarLibroV58=function(id){
-    const all=read(LS.biblioteca,{}); const arr=all[who()]||[];
-    if(arr.some(x=>x.id===id)){alert("Ya tienes este recurso prestado.");return}
-    arr.push({id,fecha:uanAhora(),vence:"30 días"});
-    all[who()]=arr; save(LS.biblioteca,all);
-    uanRegistrarAuditoria("Préstamo de biblioteca",id);
-    renderBibliotecaUAN();
-  };
-  window.uanDevolverLibroV58=function(id){
-    const all=read(LS.biblioteca,{}); all[who()]=(all[who()]||[]).filter(x=>x.id!==id); save(LS.biblioteca,all);
-    uanRegistrarAuditoria("Devolución de biblioteca",id); renderBibliotecaUAN();
-  };
-  window.uanMostrarPrestamosV58=function(){
-    const arr=read(LS.biblioteca,{})[who()]||[];
-    abrirModal(`<div class="status-modal"><div class="status-modal-kicker">BIBLIOTECA</div><h2>Mis préstamos</h2>${arr.length?`<div class="uan-ticket-list">${arr.map(x=>`<article class="uan-ticket-card"><b>${escAttr(x.id)}</b><p>Préstamo realizado: ${escAttr(x.fecha)}</p><span class="uan-pill">Vigencia: ${escAttr(x.vence)}</span></article>`).join("")}</div>`:`<p class="uan-empty-state">No tienes préstamos activos.</p>`}</div>`);
-  };
-
-  /* ---------- FINANZAS ---------- */
-  window.renderFinanzasUAN=function(){
-    const pagos=read(LS.finanzas,{})[who()]||[
-      {fecha:"2026-08-15",concepto:"Matrícula académica",valor:0,estado:"Pendiente"},
-      {fecha:"2026-08-01",concepto:"Derechos académicos",valor:0,estado:"Pendiente"}
-    ];
-    const total=pagos.reduce((s,p)=>s+Number(p.valor||0),0);
-    document.getElementById("contenido").innerHTML=`
-      <div class="uan-module-shell">
-        <div class="uan-module-hero"><span>TESORERÍA · ESTADO FINANCIERO</span><h1>Finanzas</h1><p>Consulta obligaciones, pagos y comprobantes asociados a tu cuenta.</p></div>
-        <div class="uan-kpi-grid"><div><span>OBLIGACIONES</span><b>${pagos.length}</b></div><div><span>SALDO REGISTRADO</span><b>$${total.toLocaleString("es-CO")}</b></div><div><span>ESTADO</span><b>${pagos.some(p=>p.estado==="Pendiente")?"Pendiente":"Al día"}</b></div></div>
-        <section class="uan-card"><span class="uan-card-kicker">MOVIMIENTOS</span><h2>Historial financiero</h2><div class="uan-table-wrap"><table class="uan-table"><thead><tr><th>Fecha</th><th>Concepto</th><th>Valor</th><th>Estado</th></tr></thead><tbody>${pagos.map(p=>`<tr><td>${escAttr(p.fecha)}</td><td>${escAttr(p.concepto)}</td><td>$${Number(p.valor||0).toLocaleString("es-CO")}</td><td><span class="uan-pill">${escAttr(p.estado)}</span></td></tr>`).join("")}</tbody></table></div></section>
-      </div>`;
-  };
-
   /* ---------- SEGURIDAD ---------- */
   window.renderSeguridadUAN=function(){
     const all=read(LS.seguridad,{});
@@ -9293,76 +9374,164 @@ setTimeout(actualizarBadgeNotificaciones,300);
       </div>`;
   };
 
-  /* ---------- TRÁMITES: FLUJO FORMAL ---------- */
+  /* ---------- TRÁMITES: FLUJO FORMAL + ENRUTAMIENTO POR RESPONSABLE ---------- */
   const tramitesBase=[
-    ["Certificado de estudios","Certificados","Documento que acredita estudios cursados.","Certificado"],
-    ["Certificado de notas","Certificados","Incluye asignaturas, notas definitivas y promedio.","Certificado"],
-    ["Constancia de estudiante activo","Académico","Acredita condición académica vigente.","Solicitud"],
-    ["Cancelación de asignatura","Académico","Solicitud de retiro de una asignatura dentro de las condiciones institucionales.","Solicitud"],
-    ["Adición de asignatura","Académico","Solicitud de inclusión de una asignatura o grupo.","Solicitud"],
-    ["Aplazamiento de semestre","Académico","Solicitud para suspender temporalmente el periodo académico.","Solicitud"],
-    ["Actualización de datos","Administrativo","Solicitud de corrección o actualización de información institucional.","Solicitud"],
-    ["Reingreso","Académico","Solicitud para retornar al programa después de una interrupción.","Solicitud"]
+    ["Constancia de estudiante activo","Académico","Acredita condición académica vigente.","Solicitud","admisiones","Oficina de Admisiones"],
+    ["Cancelación de asignatura","Académico","Solicitud de retiro de una asignatura dentro de las condiciones institucionales.","Solicitud","coordinador","Coordinación Académica"],
+    ["Adición de asignatura","Académico","Solicitud de inclusión de una asignatura o grupo.","Solicitud","coordinador","Coordinación Académica"],
+    ["Aplazamiento de semestre","Académico","Solicitud para suspender temporalmente el periodo académico.","Solicitud","decano","Decanatura"],
+    ["Actualización de datos","Administrativo","Solicitud de corrección o actualización de información institucional.","Solicitud","admisiones","Oficina de Admisiones"],
+    ["Reingreso","Académico","Solicitud para retornar al programa después de una interrupción.","Solicitud","decano","Decanatura"]
+  ];
+  const certificadosBase=[
+    ["Certificado de estudios","Certificados","Documento que acredita estudios cursados.","Certificado","admisiones","Oficina de Admisiones"],
+    ["Certificado de notas","Certificados","Incluye asignaturas, notas definitivas y promedio del semestre seleccionado.","Certificado","admisiones","Oficina de Admisiones"],
+    ["Certificado de matrícula","Certificados","Acredita tu matrícula en un periodo académico.","Certificado","admisiones","Oficina de Admisiones"],
+    ["Certificado de estudiante activo","Certificados","Acredita tu condición académica vigente.","Certificado","admisiones","Oficina de Admisiones"],
+    ["Certificado de semestre","Certificados","Acredita información académica del semestre solicitado.","Certificado","admisiones","Oficina de Admisiones"]
   ];
   function misTramites(){ return read(LS.tramites,{})[who()]||[]; }
   function saveMisTramites(arr){ const all=read(LS.tramites,{}); all[who()]=arr; save(LS.tramites,all); }
+  function tramiteResponsableConfig(t){
+    return {rol:t[4], oficina:t[5]};
+  }
+  function cuentasResponsables(rol, programa){
+    const cuentas=getCuentasAdmin().filter(c=>c.rol===rol);
+    if(rol==='coordinador' && programa){
+      const exactas=cuentas.filter(c=>String(c.programa||'').toLowerCase()===String(programa||'').toLowerCase());
+      if(exactas.length)return exactas;
+    }
+    return cuentas;
+  }
+  function resolverResponsable(t){
+    const cfg=tramiteResponsableConfig(t);
+    const programa=(getEstudiantes()[usuarioActual?.codigo]||{}).programa || usuarioActual?.programa || '';
+    const cuentas=cuentasResponsables(cfg.rol,programa);
+    const cuenta=cuentas[0] || null;
+    return {
+      rol:cfg.rol,
+      oficina:cfg.oficina,
+      usuario:cuenta?.usuario || '',
+      nombre: cfg.rol==='admisiones' ? 'Oficina de Admisiones' : (cfg.rol==='coordinador' ? `Coordinación Académica${cuenta?.programa ? ' · '+cuenta.programa : ''}` : 'Decanatura'),
+      programa:cuenta?.programa || programa
+    };
+  }
+  function tramitePermitidoParaUsuario(t){
+    if(!usuarioActual)return false;
+    const cfg=tramiteResponsableConfig(t);
+    if(usuarioActual.rol!==cfg.rol)return false;
+    if(t.responsableUsuario) return String(t.responsableUsuario)===String(who());
+    if(cfg.rol==='coordinador' && usuarioActual.programa){
+      return String(usuarioActual.programa).toLowerCase()===String(t.programa||'').toLowerCase();
+    }
+    return true;
+  }
+  function tramitesAsignadosActual(){
+    const all=read(LS.tramites,{});
+    return Object.values(all).flat().filter(t=>tramitePermitidoParaUsuario(t));
+  }
+  window.uanTramitesAsignadosActual=tramitesAsignadosActual;
+  function firmaTramite(t){
+    if(!t || !t.firmadoPorRol) return null;
+    if(t.firmadoPorRol==='admisiones') return {src:'firma-director-admisiones.png',titulo:'Oficina de Admisiones'};
+    if(t.firmadoPorRol==='coordinador') return {src:'firma-coordinador-academico.png',titulo:'Coordinador Académico'};
+    if(t.firmadoPorRol==='decano') return {src:'firma-decano.png',titulo:'Decano'};
+    return null;
+  }
+  function plantillaFirmaActual(){
+    if(usuarioActual?.rol==='admisiones') return {src:'firma-director-admisiones.png',titulo:'Oficina de Admisiones'};
+    if(usuarioActual?.rol==='coordinador') return {src:'firma-coordinador-academico.png',titulo:'Coordinador Académico'};
+    if(usuarioActual?.rol==='decano') return {src:'firma-decano.png',titulo:'Decano'};
+    return null;
+  }
+  function renderFirmaTramiteHTML(t){
+    const f=firmaTramite(t);
+    if(!f)return `<div class="uan-tramite-sin-firma">Pendiente de firma del responsable</div>`;
+    return `<div class="uan-tramite-firma"><img src="${f.src}" alt="Firma ${escAttr(f.titulo)}"><div class="uan-firma-line"></div><b>${escAttr(f.titulo)}</b><small>Universidad Autónoma Nacional</small></div>`;
+  }
 
   window.renderTramitesUAN=function(){
     const arr=misTramites().slice().reverse();
-    const cards=tramitesBase.map((t,i)=>`<article class="uan-service-card"><span class="uan-service-icon">${t[3]==="Certificado"?"📄":"🎫"}</span><div><span class="uan-card-kicker">${escAttr(t[1])}</span><h3>${escAttr(t[0])}</h3><p>${escAttr(t[2])}</p><button onclick="uanNuevoTramiteV58(${i})">Solicitar</button></div></article>`).join("");
-    const history=arr.map(t=>`<article class="uan-ticket-card"><div style="display:flex;justify-content:space-between;gap:10px"><b>${escAttr(t.id)}</b><span class="uan-pill">${escAttr(t.estado)}</span></div><h3>${escAttr(t.tipo)}</h3><p>${escAttr(t.descripcion||"Sin descripción adicional.")}</p><small>${escAttr(t.fecha)} · Responsable: ${escAttr(t.responsable||"Oficina correspondiente")}</small></article>`).join("");
+    const allServices=[...tramitesBase,...certificadosBase];
+    const cards=allServices.map((t,i)=>`<article class="uan-service-card"><span class="uan-service-icon">${t[3]==="Certificado"?"📄":"🎫"}</span><div><span class="uan-card-kicker">${escAttr(t[1])}</span><h3>${escAttr(t[0])}</h3><p>${escAttr(t[2])}</p><div class="uan-tramite-destino"><span>DIRIGIDO A</span><b>${escAttr(t[5])}</b></div><button onclick="uanNuevoTramiteV58(${i})">Solicitar</button></div></article>`).join("");
+    const history=arr.map(t=>`<article class="uan-ticket-card"><div style="display:flex;justify-content:space-between;gap:10px"><b>${escAttr(t.id)}</b><span class="uan-pill">${escAttr(t.estado)}</span></div><h3>${escAttr(t.tipo)}</h3><p>${escAttr(t.descripcion||"Sin descripción adicional.")}</p><div class="uan-tramite-meta"><span><b>Dirigido a:</b> ${escAttr(t.responsable||"Oficina correspondiente")}</span><span><b>Radicado:</b> ${escAttr(t.fecha)}</span></div>${t.respuesta?`<div class="uan-tramite-respuesta"><b>Respuesta:</b> ${escAttr(t.respuesta)}</div>`:""}${t.estado==='Aprobado' ? `<button class="btn-secundario" onclick="uanVerDocumentoTramite('${escAttr(t.id)}')">📄 Ver documento firmado</button>` : ""}</article>`).join("");
     document.getElementById("contenido").innerHTML=`
       <div class="uan-module-shell">
-        <div class="uan-module-hero"><span>SERVICIOS · TRÁMITES INSTITUCIONALES</span><h1>Trámites</h1><p>Solicita servicios académicos y administrativos y consulta cada etapa del proceso.</p></div>
+        <div class="uan-module-hero"><span>SERVICIOS · TRÁMITES INSTITUCIONALES</span><h1>Trámites</h1><p>Solicita servicios y consulta desde el inicio a qué oficina o autoridad queda dirigida cada solicitud.</p></div>
         <section class="uan-card"><span class="uan-card-kicker">NUEVA SOLICITUD</span><h2>¿Qué necesitas?</h2><div class="uan-service-grid">${cards}</div></section>
         <section class="uan-card"><span class="uan-card-kicker">SEGUIMIENTO</span><h2>Mis trámites</h2><div class="uan-ticket-list">${history||`<div class="uan-empty-state">Aún no tienes trámites registrados.</div>`}</div></section>
       </div>`;
   };
   window.uanNuevoTramiteV58=function(i){
-    const t=tramitesBase[i]; if(!t)return;
-    abrirModal(`<div class="status-modal"><div class="status-modal-kicker">${escAttr(t[1])}</div><h2>${escAttr(t[0])}</h2><p>${escAttr(t[2])}</p><label>Periodo o referencia<input id="v58TrRef" placeholder="Ej. 2026-2"></label><label>Información adicional<textarea id="v58TrDesc" placeholder="Explica brevemente tu solicitud..."></textarea></label><button onclick="uanGuardarTramiteV58(${i})">📨 Enviar solicitud</button></div>`);
+    const allServices=[...tramitesBase,...certificadosBase]; const t=allServices[i]; if(!t)return;
+    const esNotas=t[0]==="Certificado de notas";
+    if(esNotas){ const codigo=usuarioActual?.codigo||usuarioActual?.usuario; const periodos=getPeriodosDisponibles(codigo); abrirModal(`<div class="status-modal"><div class="status-modal-kicker">CERTIFICADOS · NOTAS</div><h2>${escAttr(t[0])}</h2><p>${escAttr(t[2])}</p><div class="uan-tramite-destino uan-tramite-destino-modal"><span>ESTA SOLICITUD SERÁ DIRIGIDA A</span><b>Oficina de Admisiones</b><small>Verificación y expedición</small></div><label>Semestre a certificar<select id="v58CertPeriodo">${periodos.map(p=>`<option value="${escAttr(p)}">${escAttr(p)}</option>`).join("")}</select></label><label>Información adicional<textarea id="v58TrDesc" placeholder="Observaciones opcionales..."></textarea></label><button onclick="uanGuardarTramiteV58(${i})">📨 Solicitar certificado de notas</button></div>`); return; }
+    const r=resolverResponsable(t);
+    abrirModal(`<div class="status-modal"><div class="status-modal-kicker">${escAttr(t[1])}</div><h2>${escAttr(t[0])}</h2><p>${escAttr(t[2])}</p><div class="uan-tramite-destino uan-tramite-destino-modal"><span>ESTA SOLICITUD SERÁ DIRIGIDA A</span><b>${escAttr(r.nombre)}</b><small>${escAttr(r.oficina)}</small></div><label>Periodo o referencia<input id="v58TrRef" placeholder="Ej. 2026-2"></label><label>Información adicional<textarea id="v58TrDesc" placeholder="Explica brevemente tu solicitud..."></textarea></label><button onclick="uanGuardarTramiteV58(${i})">📨 Enviar solicitud</button></div>`);
   };
   window.uanGuardarTramiteV58=function(i){
-    const t=tramitesBase[i], desc=document.getElementById("v58TrDesc")?.value.trim()||"", ref=document.getElementById("v58TrRef")?.value.trim()||"";
+    const allServices=[...tramitesBase,...certificadosBase]; const t=allServices[i], desc=document.getElementById("v58TrDesc")?.value.trim()||"", ref=(document.getElementById("v58CertPeriodo")?.value||document.getElementById("v58TrRef")?.value||"").trim();
+    if(!t)return;
+    const r=resolverResponsable(t);
+    if(!r.usuario){ alert(`No hay una cuenta de ${r.oficina} configurada para recibir este trámite.`); return; }
     const arr=misTramites(); const id="TRM-"+new Date().getFullYear()+"-"+String(arr.length+1).padStart(5,"0");
-    arr.push({id,tipo:t[0],categoria:t[1],descripcion:desc,referencia:ref,fecha:uanAhora(),estado:"Radicado",owner:who(),ownerName:nombre(),responsable:"Oficina correspondiente",historial:[{estado:"Radicado",fecha:uanAhora(),actor:who()}]});
+    const fecha=uanAhora();
+    const periodoSolicitud=(t[0]==="Certificado de notas"?ref:(ref||UAN_PERIODO_ACTUAL));
+    arr.push({id,tipo:t[0],categoria:t[1],esCertificado:t[3]==="Certificado",descripcion:desc,referencia:ref,periodo:periodoSolicitud,fecha,estado:"Radicado",owner:who(),ownerName:nombre(),programa:(getEstudiantes()[usuarioActual?.codigo]||{}).programa||usuarioActual?.programa||"",responsable:r.nombre,responsableOficina:r.oficina,responsableRol:r.rol,responsableUsuario:r.usuario,historial:[{estado:"Radicado",fecha,actor:who()}]});
     saveMisTramites(arr);
+    if(t[3]==="Certificado") {
+      const e=getEstudiantes()[usuarioActual?.codigo]||{}; const ca=uanCerts();
+      const cid="CERT-"+new Date().getFullYear()+"-"+String(ca.length+1).padStart(5,"0");
+      ca.push({id:cid,fecha,owner:who(),ownerName:e.nombre||nombre(),codigo:e.codigo||who(),programa:e.programa||usuarioActual?.programa||"",tipo:t[0],periodo:periodoSolicitud,estado:"Pendiente",tramiteId:id});
+      uanSaveCerts(ca);
+    }
     uanRegistrarAuditoria("Radicación de trámite",t[0],id);
-    uanCrearNotificacion("Trámite radicado",`${id} quedó en estado Radicado.`,"success","renderTramitesUAN()",[{value:who(),rol:usuarioActual?.rol||""}]);
+    uanCrearNotificacion("Nuevo trámite radicado",`${id} fue dirigido a ${r.nombre}.`,"success","renderTramitesAdminUAN()",[{value:r.usuario,rol:r.rol}]);
+    uanCrearNotificacion("Trámite radicado",`${id} fue dirigido a ${r.nombre}.`,"success","renderTramitesUAN()",[{value:who(),rol:usuarioActual?.rol||""}]);
     cerrarModal(); renderTramitesUAN();
-    alert(`Solicitud ${id} radicada correctamente.`);
+    alert(`Solicitud ${id} radicada correctamente y dirigida a ${r.nombre}.`);
   };
 
   window.renderTramitesAdminUAN=function(){
-    if(!canManage()){abrirModal(`<div class="status-modal"><h2>Acceso restringido</h2><p>Solo perfiles autorizados pueden gestionar trámites.</p></div>`);return}
-    const all=read(LS.tramites,{});
-    const arr=Object.values(all).flat().slice().reverse();
+    if(!usuarioActual || !['admisiones','coordinador','decano'].includes(usuarioActual.rol)){
+      abrirModal(`<div class="status-modal"><h2>Acceso restringido</h2><p>Este módulo solo está disponible para la autoridad responsable de cada trámite.</p></div>`);return;
+    }
+    const arr=tramitesAsignadosActual().slice().reverse();
+    const rolLabel=usuarioActual.rol==='admisiones'?'Admisiones':(usuarioActual.rol==='coordinador'?'Coordinación Académica':'Decanatura');
     document.getElementById("contenido").innerHTML=`
       <div class="uan-module-shell">
-        <div class="uan-module-hero"><span>MESA DE TRÁMITES · GESTIÓN</span><h1>Gestión de Trámites</h1><p>Radica, revisa, asigna, responde y cierra solicitudes con trazabilidad.</p></div>
-        <div class="uan-module-toolbar"><select id="v58TrFilter" onchange="renderTramitesAdminUAN()"><option value="">Todos los estados</option><option>Radicado</option><option>En revisión</option><option>En proceso</option><option>Aprobado</option><option>Rechazado</option><option>Cerrado</option></select></div>
-        <section class="uan-card"><div class="uan-table-wrap"><table class="uan-table"><thead><tr><th>ID</th><th>Solicitante</th><th>Trámite</th><th>Fecha</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>${arr.map(t=>`<tr><td><b>${escAttr(t.id)}</b></td><td>${escAttr(t.ownerName)}</td><td>${escAttr(t.tipo)}</td><td>${escAttr(t.fecha)}</td><td><span class="uan-pill">${escAttr(t.estado)}</span></td><td><button class="btn-secundario" onclick="uanGestionarTramiteV58('${escAttr(t.id)}')">Gestionar</button></td></tr>`).join("")||`<tr><td colspan="6">No hay trámites registrados.</td></tr>`}</tbody></table></div></section>
+        <div class="uan-module-hero"><span>MESA DE TRÁMITES · ${escAttr(rolLabel.toUpperCase())}</span><h1>Trámites asignados</h1><p>Solo aparecen solicitudes dirigidas a esta autoridad. Las demás permanecen invisibles.</p></div>
+        <section class="uan-card"><div class="uan-table-wrap"><table class="uan-table"><thead><tr><th>ID</th><th>Solicitante</th><th>Trámite</th><th>Dirigido a</th><th>Fecha</th><th>Estado</th><th>Acción</th></tr></thead><tbody>${arr.map(t=>`<tr><td><b>${escAttr(t.id)}</b></td><td>${escAttr(t.ownerName)}</td><td>${escAttr(t.tipo)}</td><td>${escAttr(t.responsable||'—')}</td><td>${escAttr(t.fecha)}</td><td><span class="uan-pill">${escAttr(t.estado)}</span></td><td><button class="btn-secundario" onclick="uanGestionarTramiteV58('${escAttr(t.id)}')">Gestionar</button></td></tr>`).join("")||`<tr><td colspan="7">No tienes trámites asignados.</td></tr>`}</tbody></table></div></section>
+        ${usuarioActual.rol==='admisiones'?`<section class="uan-card"><span class="uan-card-kicker">CERTIFICADOS</span><h2>Gestión de certificados</h2><p class="uan-help-note">Los certificados forman parte del mismo módulo de Trámites. Aquí Admisiones puede revisar y gestionar su expedición.</p><div class="uan-table-wrap"><table class="uan-table"><thead><tr><th>ID</th><th>Estudiante</th><th>Tipo</th><th>Periodo</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>${uanCerts().slice().reverse().map(c=>{const activo=!['Anulado','Rechazado'].includes(c.estado); return `<tr><td><b>${escAttr(c.id)}</b></td><td>${escAttr(c.ownerName)}<br><small>${escAttr(c.codigo)}</small></td><td>${escAttr(c.tipo)}</td><td>${escAttr(c.periodo||'—')}</td><td><span class="uan-pill">${escAttr(c.estado||'Pendiente')}</span></td><td><div style="display:flex;gap:5px;flex-wrap:wrap"><button class="btn-secundario" onclick="uanVerCertificado('${escAttr(c.id)}')">👁 Ver</button>${activo?`<button class="btn-secundario" onclick="uanEditarCertificado('${escAttr(c.id)}')">✏ Editar</button><button class="btn-secundario" onclick="uanPrevisualizarCertificado('${escAttr(c.id)}')">📄 Vista previa</button>`:''}${c.estado==='Pendiente'?`<button class="btn-secundario" onclick="uanRechazarCertificado('${escAttr(c.id)}')">❌ Rechazar</button><button onclick="uanAprobarCertificado('${escAttr(c.id)}')">✅ Aprobar</button>`:''}${c.estado==='Disponible'?`<button onclick="uanRegenerarCertificado('${escAttr(c.id)}')">🔄 Regenerar</button><button class="btn-secundario" onclick="uanAnularCertificado('${escAttr(c.id)}')">🚫 Anular</button>`:''}${['Anulado','Rechazado'].includes(c.estado)?`<button class="btn-secundario" onclick="uanReactivarCertificado('${escAttr(c.id)}')">↩ Reactivar</button>`:''}</div></td></tr>`}).join('')||`<tr><td colspan="6">No hay certificados registrados.</td></tr>`}</tbody></table></div></section>`:''}
       </div>`;
-    const sel=document.getElementById("v58TrFilter"); if(sel)sel.value=window.__uanTrFilter||"";
   };
   window.uanGestionarTramiteV58=function(id){
-    if(!canManage())return;
+    if(!usuarioActual || !['admisiones','coordinador','decano'].includes(usuarioActual.rol))return;
     const all=read(LS.tramites,{}), pair=Object.entries(all).find(([k,arr])=>(arr||[]).some(t=>String(t.id)===String(id)));
     if(!pair)return;
     const [owner,arr]=pair, t=arr.find(x=>String(x.id)===String(id));
-    if(!t)return;
-    abrirModal(`<div class="status-modal"><div class="status-modal-kicker">${escAttr(t.id)} · ${escAttr(t.categoria)}</div><h2>${escAttr(t.tipo)}</h2><p><b>Solicitante:</b> ${escAttr(t.ownerName)}<br><b>Fecha:</b> ${escAttr(t.fecha)}<br><b>Referencia:</b> ${escAttr(t.referencia||"—")}</p><div class="uan-ticket-body">${escAttr(t.descripcion||"Sin descripción adicional.")}</div><label>Estado<select id="v58TrEstado">${["Radicado","En revisión","En proceso","Aprobado","Rechazado","Cerrado"].map(s=>`<option ${s===t.estado?"selected":""}>${s}</option>`).join("")}</select></label><label>Respuesta / observación<textarea id="v58TrResp">${escAttr(t.respuesta||"")}</textarea></label><label>Responsable<input id="v58TrRespName" value="${escAttr(t.responsable||"Oficina correspondiente")}"></label><button onclick="uanGuardarGestionTramiteV58('${escAttr(id)}','${escAttr(owner)}')">💾 Guardar gestión</button></div>`);
+    if(!t || !tramitePermitidoParaUsuario(t)){ alert('Este trámite no está asignado a tu cuenta.'); return; }
+    abrirModal(`<div class="status-modal"><div class="status-modal-kicker">${escAttr(t.id)} · ${escAttr(t.categoria)}</div><h2>${escAttr(t.tipo)}</h2><div class="uan-tramite-destino uan-tramite-destino-modal"><span>DIRIGIDO A</span><b>${escAttr(t.responsable||'—')}</b><small>${escAttr(t.responsableOficina||'—')}</small></div><p><b>Solicitante:</b> ${escAttr(t.ownerName)}<br><b>Fecha:</b> ${escAttr(t.fecha)}<br><b>Programa:</b> ${escAttr(t.programa||'—')}<br><b>Referencia:</b> ${escAttr(t.referencia||'—')}</p><div class="uan-ticket-body">${escAttr(t.descripcion||'Sin descripción adicional.')}</div><label>Estado<select id="v58TrEstado">${['Radicado','En revisión','En proceso','Aprobado','Rechazado','Cerrado'].map(s=>`<option ${s===t.estado?'selected':''}>${s}</option>`).join('')}</select></label><label>Respuesta / observación<textarea id="v58TrResp">${escAttr(t.respuesta||'')}</textarea></label><div class="uan-firma-preview"><span>FIRMA DEL RESPONSABLE</span>${renderFirmaTramiteHTML({...t,firmadoPorRol:usuarioActual.rol})}</div><button onclick="uanGuardarGestionTramiteV58('${escAttr(id)}','${escAttr(owner)}')">💾 Guardar gestión y firmar</button></div>`);
   };
   window.uanGuardarGestionTramiteV58=function(id,owner){
-    if(!canManage())return;
-    const all=read(LS.tramites,{}), arr=all[owner]||[], t=arr.find(x=>String(x.id)===String(id)); if(!t)return;
-    const estado=document.getElementById("v58TrEstado")?.value||t.estado;
-    t.estado=estado; t.respuesta=document.getElementById("v58TrResp")?.value.trim()||""; t.responsable=document.getElementById("v58TrRespName")?.value.trim()||"Oficina correspondiente";
-    t.historial=Array.isArray(t.historial)?t.historial:[]; t.historial.push({estado,fecha:uanAhora(),actor:who(),respuesta:t.respuesta});
+    if(!usuarioActual || !['admisiones','coordinador','decano'].includes(usuarioActual.rol))return;
+    const all=read(LS.tramites,{}), arr=all[owner]||[], t=arr.find(x=>String(x.id)===String(id)); if(!t || !tramitePermitidoParaUsuario(t))return;
+    const estado=document.getElementById('v58TrEstado')?.value||t.estado;
+    t.estado=estado; t.respuesta=document.getElementById('v58TrResp')?.value.trim()||'';
+    t.gestionadoPor=usuarioActual.usuario||who(); t.gestionadoPorNombre=nombre();
+    t.firmadoPorRol=(estado==='Aprobado'||estado==='Rechazado'||estado==='Cerrado') ? usuarioActual.rol : (t.firmadoPorRol||'');
+    t.firmadoPor=t.gestionadoPorName||nombre(); t.firmadoEn=uanAhora();
+    t.historial=Array.isArray(t.historial)?t.historial:[]; t.historial.push({estado,fecha:uanAhora(),actor:who(),respuesta:t.respuesta,firmadoPorRol:t.firmadoPorRol});
     all[owner]=arr; save(LS.tramites,all);
-    uanRegistrarAuditoria("Gestión de trámite",`${id} → ${estado}`,id);
-    uanCrearNotificacion("Actualización de trámite",`${id}: ${estado}`,"info","renderTramitesUAN()",[{value:owner,rol:""}]);
+    uanRegistrarAuditoria('Gestión de trámite',`${id} → ${estado}`,id);
+    uanCrearNotificacion('Actualización de trámite',`${id}: ${estado}`, 'info','renderTramitesUAN()',[{value:owner,rol:'estudiante'}]);
     cerrarModal(); renderTramitesAdminUAN();
+  };
+  window.uanVerDocumentoTramite=function(id){
+    const all=read(LS.tramites,{}), pair=Object.entries(all).find(([k,arr])=>(arr||[]).some(t=>String(t.id)===String(id)));
+    if(!pair)return;
+    const t=pair[1].find(x=>String(x.id)===String(id)); if(!t || t.estado!=='Aprobado')return;
+    abrirModal(`<div class="uan-tramite-documento"><div class="uan-cert-head"><img src="uan-emblem.svg" alt="UAN"><div><b>UNIVERSIDAD AUTÓNOMA NACIONAL</b><small>DOCUMENTO OFICIAL · TRÁMITE ACADÉMICO</small></div></div><div class="uan-tramite-doc-kicker">CONSTANCIA DE GESTIÓN</div><h1>${escAttr(t.tipo)}</h1><p>Se deja constancia de que la solicitud presentada por <b>${escAttr(t.ownerName)}</b>, código <b>${escAttr(t.owner||'—')}</b>, fue <b>APROBADA</b> por la autoridad competente.</p><div class="uan-tramite-doc-grid"><div><span>RADICADO</span><b>${escAttr(t.id)}</b></div><div><span>FECHA</span><b>${escAttr(t.fecha)}</b></div><div><span>DIRIGIDO A</span><b>${escAttr(t.responsable||'—')}</b></div><div><span>PROGRAMA</span><b>${escAttr(t.programa||'—')}</b></div></div>${t.respuesta?`<div class="uan-tramite-respuesta"><b>Observación oficial:</b> ${escAttr(t.respuesta)}</div>`:''}<div class="uan-tramite-firma-wrap">${renderFirmaTramiteHTML(t)}</div><div class="uan-cert-actions"><button onclick="window.print()">🖨 Guardar como PDF / Imprimir</button><button class="btn-secundario" onclick="cerrarModal()">Cerrar</button></div></div>`);
   };
 
   /* ---------- CORREO: BANDEJA TIPO GMAIL ---------- */
@@ -9422,11 +9591,11 @@ setTimeout(actualizarBadgeNotificaciones,300);
       if(!menu || !usuarioActual)return;
       let extra="";
       if(usuarioActual.rol==="estudiante"){
-        extra=`<div class="menu-item uan-v58-extra" onclick="renderTramitesUAN()">🗂️ Trámites <span>›</span></div><div class="menu-item uan-v58-extra" onclick="renderPerfilUAN()">👤 Mi Perfil <span>›</span></div><div class="menu-item uan-v58-extra" onclick="renderBibliotecaUAN()">📚 Biblioteca <span>›</span></div><div class="menu-item uan-v58-extra" onclick="renderFinanzasUAN()">💳 Finanzas <span>›</span></div><div class="menu-item uan-v58-extra" onclick="renderSeguridadUAN()">🔐 Seguridad <span>›</span></div>`;
+        extra=`<div class="menu-item uan-v58-extra" onclick="renderTramitesUAN()">🗂️ Trámites <span>›</span></div><div class="menu-item uan-v58-extra" onclick="renderPerfilUAN()">👤 Mi Perfil <span>›</span></div><div class="menu-item uan-v58-extra" onclick="renderSeguridadUAN()">🔐 Seguridad <span>›</span></div>`;
       } else if(["docente"].includes(usuarioActual.rol)){
-        extra=`<div class="menu-item uan-v58-extra" onclick="renderPerfilUAN()">👤 Mi Perfil <span>›</span></div><div class="menu-item uan-v58-extra" onclick="renderBibliotecaUAN()">📚 Biblioteca <span>›</span></div><div class="menu-item uan-v58-extra" onclick="renderFinanzasUAN()">💳 Finanzas <span>›</span></div><div class="menu-item uan-v58-extra" onclick="renderSeguridadUAN()">🔐 Seguridad <span>›</span></div>`;
-      } else if(["admisiones","director","coordinador"].includes(usuarioActual.rol)){
-        extra=`<div class="menu-item uan-v58-extra" onclick="renderTramitesAdminUAN()">🗂️ Gestión de Trámites <span>›</span></div><div class="menu-item uan-v58-extra" onclick="renderPerfilUAN()">👤 Mi Perfil <span>›</span></div><div class="menu-item uan-v58-extra" onclick="renderSeguridadUAN()">🔐 Seguridad <span>›</span></div>`;
+        extra=`<div class="menu-item uan-v58-extra" onclick="renderPerfilUAN()">👤 Mi Perfil <span>›</span></div><div class="menu-item uan-v58-extra" onclick="renderSeguridadUAN()">🔐 Seguridad <span>›</span></div>`;
+      } else if(["admisiones","coordinador","decano","director"].includes(usuarioActual.rol)){
+        extra=`<div class="menu-item uan-v58-extra" onclick="renderTramitesAdminUAN()">🗂️ Trámites asignados <span>›</span></div><div class="menu-item uan-v58-extra" onclick="renderPerfilUAN()">👤 Mi Perfil <span>›</span></div><div class="menu-item uan-v58-extra" onclick="renderSeguridadUAN()">🔐 Seguridad <span>›</span></div>`;
       }
       if(!menu.querySelector(".uan-v58-extra")) menu.insertAdjacentHTML("beforeend",extra);
     };
@@ -9567,9 +9736,7 @@ setTimeout(actualizarBadgeNotificaciones,300);
     {id:"coordinador",nombre:"Coordinador",descripcion:"Gestión de programas, grupos y seguimiento académico"},
     {id:"director",nombre:"Director de Escuela",descripcion:"Supervisión académica de la escuela"},
     {id:"docente",nombre:"Docente",descripcion:"Cursos, asistencia, actividades y calificaciones"},
-    {id:"tesoreria",nombre:"Tesorería / Financiero",descripcion:"Obligaciones, pagos y comprobantes"},
-    {id:"biblioteca",nombre:"Bibliotecario",descripcion:"Catálogo, préstamos, devoluciones y reservas"},
-    {id:"estudiante",nombre:"Estudiante",descripcion:"Consulta académica, trámites, biblioteca y finanzas"}
+    {id:"estudiante",nombre:"Estudiante",descripcion:"Consulta académica, trámites y servicios institucionales"}
   ];
   function programas(){
     const p=read(PROG_KEY,null);
@@ -9639,23 +9806,11 @@ setTimeout(actualizarBadgeNotificaciones,300);
     renderProgramasAcademicosV60();
   };
 
-  window.uanRolesV60=function(){return rolesBase.concat([{id:"tesoreria",nombre:"Tesorería / Financiero",descripcion:"Obligaciones, pagos y comprobantes"},{id:"biblioteca",nombre:"Bibliotecario",descripcion:"Catálogo y préstamos"}].filter(x=>!rolesBase.some(r=>r.id===x.id)))};
+  window.uanRolesV60=function(){return rolesBase.slice()};
 
   window.renderRolesSistemaV60=function(){
     if(!isAdminPrincipal())return;
-    document.getElementById("contenido").innerHTML=`<div class="uan-module-shell"><div class="uan-module-hero"><span>ADMINISTRACIÓN · PERFILES</span><h1>Roles del sistema</h1><p>Perfiles responsables de cada proceso institucional.</p></div><div class="uan-role-grid-v60">${rolesBase.map(r=>`<article class="uan-role-card-v60"><span class="uan-service-icon">${r.id==="tesoreria"?"💰":r.id==="biblioteca"?"📚":r.id==="docente"?"👨‍🏫":r.id==="estudiante"?"🎓":"🏛️"}</span><h3>${escAttr(r.nombre)}</h3><p>${escAttr(r.descripcion)}</p></article>`).join("")}</div></div>`;
-  };
-
-  window.renderTesoreriaUAN=function(){
-    if(usuarioActual?.rol!=="tesoreria"){abrirModal(`<div class="status-modal"><h2>Acceso restringido</h2><p>Este módulo corresponde a Tesorería / Financiero.</p></div>`);return}
-    document.getElementById("contenido").innerHTML=`<div class="uan-module-shell"><div class="uan-module-hero"><span>TESORERÍA · FINANZAS</span><h1>Gestión financiera</h1><p>Revisa obligaciones y confirma pagos de estudiantes.</p></div><section class="uan-card"><h2>Pagos</h2><p>Desde aquí Tesorería podrá registrar y confirmar pagos. Los estudiantes solo consultan su estado.</p><div class="uan-empty-state">Conecta este módulo con la tabla de pagos de Supabase para registrar transacciones reales.</div></section></div>`;
-  };
-  window.renderBibliotecarioUAN=function(){
-    if(usuarioActual?.rol!=="biblioteca"){abrirModal(`<div class="status-modal"><h2>Acceso restringido</h2><p>Este módulo corresponde al Bibliotecario.</p></div>`);return}
-    document.getElementById("contenido").innerHTML=`<div class="uan-module-shell"><div class="uan-module-hero"><span>BIBLIOTECA · OPERACIÓN</span><h1>Gestión de biblioteca</h1><p>Controla ejemplares, préstamos, devoluciones y reservas.</p></div><section class="uan-card"><h2>Operación bibliotecaria</h2><div class="uan-service-grid"><article class="uan-service-card"><span class="uan-service-icon">📚</span><div><h3>Catálogo</h3><p>Administrar títulos y ejemplares.</p><button onclick="renderBibliotecaUAN()">Abrir catálogo</button></div></article><article class="uan-service-card"><span class="uan-service-icon">🤝</span><div><h3>Préstamos</h3><p>Registrar entrega y devolución.</p><button onclick="uanMostrarPrestamosBibliotecaAdminV60()">Gestionar préstamos</button></div></article></div></section></div>`;
-  };
-  window.uanMostrarPrestamosBibliotecaAdminV60=function(){
-    abrirModal(`<div class="status-modal"><h2>Préstamos</h2><p>Este panel queda preparado para conectar los préstamos reales del catálogo y registrar entrega/devolución.</p></div>`);
+    document.getElementById("contenido").innerHTML=`<div class="uan-module-shell"><div class="uan-module-hero"><span>ADMINISTRACIÓN · PERFILES</span><h1>Roles del sistema</h1><p>Perfiles responsables de cada proceso institucional.</p></div><div class="uan-role-grid-v60">${rolesBase.map(r=>`<article class="uan-role-card-v60"><span class="uan-service-icon">${r.id==="docente"?"👨‍🏫":r.id==="estudiante"?"🎓":"🏛️"}</span><h3>${escAttr(r.nombre)}</h3><p>${escAttr(r.descripcion)}</p></article>`).join("")}</div></div>`;
   };
 
   // Helper for program dropdowns: replaces hard-coded Sistemas options when found.
@@ -9696,8 +9851,6 @@ window.uanProgramOptionsV60=function(selected){
       extra=`<div class="menu-item uan-v60-menu" onclick="renderProgramasAcademicosV60()">🎓 Programas académicos <span>›</span></div>
       <div class="menu-item uan-v60-menu" onclick="renderRolesSistemaV60()">🛡️ Roles del sistema <span>›</span></div>`;
     }
-    if(usuarioActual.rol==="tesoreria")extra+=`<div class="menu-item uan-v60-menu" onclick="renderTesoreriaUAN()">💰 Gestión financiera <span>›</span></div>`;
-    if(usuarioActual.rol==="biblioteca")extra+=`<div class="menu-item uan-v60-menu" onclick="renderBibliotecarioUAN()">📚 Gestión de biblioteca <span>›</span></div>`;
     if(extra)menu.insertAdjacentHTML("beforeend",extra);
   };
   window.__uanV60MenuWrapped=true;
@@ -9708,315 +9861,7 @@ window.uanProgramOptionsV60=function(selected){
 
 
 
-/* ================================================================
-   UAN V64 — PORTAL DE PAGO SIMULADO
-   IMPORTANTE: prototipo académico. NO procesa tarjetas reales.
-   Nunca se almacena CVV ni datos completos de tarjeta.
-   ================================================================ */
-(function(){
-  const PAYKEY="uan_intentos_pago_v64";
 
-  function readPay(){try{return JSON.parse(localStorage.getItem(PAYKEY)||"{}")}catch(e){return {}}}
-  function savePay(x){localStorage.setItem(PAYKEY,JSON.stringify(x))}
-  function money(n){return Number(n||0).toLocaleString("es-CO")}
-  function getObligacionV64(){
-    try{
-      const all=JSON.parse(localStorage.getItem("uan_pagos_v63")||"{}");
-      return all[usuarioActual?.codigo||usuarioActual?.usuario]||null;
-    }catch(e){return null}
-  }
-
-  window.renderPagoMatriculaV64=function(){
-    if(usuarioActual?.rol!=="estudiante"){
-      abrirModal(`<div class="status-modal"><h2>Acceso restringido</h2><p>El portal de pago está disponible para estudiantes.</p></div>`);return;
-    }
-    const p=getObligacionV64();
-    if(!p){
-      document.getElementById("contenido").innerHTML=`<div class="uan-module-shell"><div class="uan-module-hero"><span>PAGOS · MATRÍCULA</span><h1>Pago de matrícula</h1><p>No existe una obligación de matrícula para esta cuenta.</p></div></div>`;return;
-    }
-    if(p.estado==="Pagado"){
-      document.getElementById("contenido").innerHTML=`<div class="uan-module-shell"><div class="uan-module-hero"><span>PAGO CONFIRMADO</span><h1>Matrícula pagada</h1><p>Tu pago ya fue confirmado por Tesorería.</p></div><section class="uan-card"><div class="uan-success-box">✓ Pago confirmado · Comprobante <b>${escAttr(p.comprobante||"—")}</b></div><button onclick="uanVerPagoV63('${escAttr(usuarioActual.codigo||usuarioActual.usuario)}')">📄 Ver recibo</button></section></div>`;
-      return;
-    }
-    const cuotas=Math.max(1,Math.min(12,Number(p.cuotasMax||6)));
-    document.getElementById("contenido").innerHTML=`
-      <div class="uan-module-shell">
-        <div class="uan-module-hero"><span>PAGOS · PASARELA ACADÉMICA</span><h1>Pagar matrícula</h1><p>Realiza el intento de pago y espera la confirmación de Tesorería.</p></div>
-        <section class="uan-card uan-payment-card">
-          <div class="uan-payment-summary"><span>VALOR A PAGAR</span><strong>$${money(p.valor)}</strong><small>${escAttr(p.concepto)} · ${escAttr(p.periodo)}</small></div>
-          <div class="uan-payment-notice">🔒 <b>Modo demostración.</b> Este formulario simula una pasarela de pagos para tu proyecto. No introduzcas una tarjeta real. Los datos de tarjeta no se guardan.</div>
-          <div class="uan-payment-form">
-            <label>Número de tarjeta (prueba)<input id="v64Card" inputmode="numeric" maxlength="19" placeholder="4111 1111 1111 1111" oninput="uanFormatearTarjetaV64(this)"></label>
-            <div class="uan-payment-row">
-              <label>Vencimiento<input id="v64Exp" inputmode="numeric" maxlength="5" placeholder="MM/AA"></label>
-              <label>CVV<input id="v64Cvv" type="password" inputmode="numeric" maxlength="4" placeholder="123"></label>
-            </div>
-            <label>Nombre del titular<input id="v64Name" autocomplete="off" placeholder="Nombre del estudiante"></label>
-            <label>Cuotas<select id="v64Cuotas">${Array.from({length:cuotas},(_,i)=>`<option value="${i+1}">${i+1} cuota${i?"s":""} · $${money(Number(p.valor||0)/(i+1))} aprox.</option>`).join("")}</select></label>
-            <button onclick="uanProcesarPagoV64()">💳 Realizar pago de prueba</button>
-          </div>
-          <p class="uan-help-note">Para probar usa una tarjeta ficticia como <b>4111 1111 1111 1111</b>. No se procesa dinero real.</p>
-        </section>
-      </div>`;
-  };
-
-  window.uanFormatearTarjetaV64=function(el){
-    const raw=String(el.value||"").replace(/\D/g,"").slice(0,16);
-    el.value=raw.replace(/(.{4})/g,"$1 ").trim();
-  };
-
-  window.uanProcesarPagoV64=function(){
-    if(usuarioActual?.rol!=="estudiante")return;
-    const p=getObligacionV64(); if(!p)return;
-    const card=(document.getElementById("v64Card")?.value||"").replace(/\D/g,"");
-    const exp=(document.getElementById("v64Exp")?.value||"").trim();
-    const cvv=(document.getElementById("v64Cvv")?.value||"").trim();
-    const name=(document.getElementById("v64Name")?.value||"").trim();
-    const cuotas=Number(document.getElementById("v64Cuotas")?.value||1);
-    if(card.length!==16 || !/^\d{2}\/\d{2}$/.test(exp) || !/^\d{3,4}$/.test(cvv) || !name){
-      alert("Completa los datos de prueba correctamente. Usa 4111 1111 1111 1111 como tarjeta de demostración.");return;
-    }
-    if(card!=="4111111111111111"){
-      alert("Para este prototipo usa únicamente la tarjeta de prueba 4111 1111 1111 1111.");return;
-    }
-    // Do not persist full card, expiry or CVV.
-    const all=readPay(), codigo=usuarioActual.codigo||usuarioActual.usuario;
-    const ref="PAY-"+Date.now();
-    all[codigo]={referencia:ref,fecha:new Date().toISOString(),cuotas,estado:"En verificación",ultimos4:card.slice(-4),titular:name};
-    savePay(all);
-
-    // Keep the financial obligation pending until Tesorería confirms it.
-    const payments=JSON.parse(localStorage.getItem("uan_pagos_v63")||"{}");
-    if(payments[codigo]){
-      payments[codigo].intentoPago={referencia:ref,fecha:new Date().toISOString(),cuotas,estado:"En verificación",ultimos4:card.slice(-4)};
-      payments[codigo].estado="Pendiente";
-      localStorage.setItem("uan_pagos_v63",JSON.stringify(payments));
-    }
-    try{uanRegistrarAuditoria("Intento de pago de matrícula",`${codigo} · ${ref}`)}catch(e){}
-    try{uanCrearNotificacion("Pago enviado a Tesorería",`Tu pago ${ref} está en verificación.`,"info","renderPagoMatriculaV64()",[{value:codigo,rol:""}])}catch(e){}
-    document.getElementById("contenido").innerHTML=`<div class="uan-module-shell"><div class="uan-module-hero"><span>PAGO EN VERIFICACIÓN</span><h1>Solicitud enviada</h1><p>El intento de pago fue registrado y quedó pendiente de confirmación.</p></div><section class="uan-card"><div class="uan-success-box">✓ Referencia de pago: <b>${escAttr(ref)}</b><br>Estado: <b>En verificación por Tesorería</b><br>Tarjeta: •••• ${escAttr(card.slice(-4))}<br>Cuotas: <b>${cuotas}</b></div><p>Tu matrícula <b>NO</b> se marcará como pagada hasta que Tesorería confirme el pago.</p></section></div>`;
-  };
-
-  /* Add the student's "Pagar matrícula" menu item through the existing sidebar. */
-  if(!window.__uanV64Menu){
-    const old=window.renderSidebar;
-    window.renderSidebar=function(){
-      if(typeof old==="function")old.apply(this,arguments);
-      const menu=document.getElementById("menuDinamico");
-      if(menu && usuarioActual?.rol==="estudiante" && !menu.querySelector(".uan-v64-pay")){
-        menu.insertAdjacentHTML("beforeend",`<div class="menu-item uan-v64-pay" onclick="renderPagoMatriculaV64()">💳 Pagar matrícula <span>›</span></div>`);
-      }
-    };
-    window.__uanV64Menu=true;
-  }
-})();
-
-/* ================================================================
-   UAN V63 — TESORERÍA Y BIBLIOTECA OPERATIVAS
-   - Obligación de matrícula por estudiante
-   - Estados Pendiente / Pagado / Vencido
-   - Tesorería puede liquidar, registrar y revertir pagos
-   - Estudiante solo consulta
-   - Comprobante y fecha de pago
-   - Biblioteca mantiene gestión separada
-   ================================================================ */
-(function(){
-  const PKEY="uan_pagos_v63";
-
-  function pagos(){
-    try{return JSON.parse(localStorage.getItem(PKEY)||"{}")}catch(e){return {}}
-  }
-  function savePagos(o){localStorage.setItem(PKEY,JSON.stringify(o))}
-  function hoy(){return new Date().toISOString()}
-  function dinero(n){return Number(n||0).toLocaleString("es-CO")}
-  function isTesoreria(){return usuarioActual?.rol==="tesoreria"}
-  function isAdmin(){return usuarioActual?.usuario==="admin" && usuarioActual?.rol==="admisiones"}
-
-  function asegurarObligaciones(){
-    const all=pagos(), est=getEstudiantes();
-    Object.keys(est||{}).forEach(c=>{
-      if(!all[c]){
-        all[c]={
-          codigo:c,
-          concepto:"Matrícula académica",
-          periodo:"2026-2",
-          valor:0,
-          estado:"Pendiente",
-          creadoEn:hoy(),
-          pagadoEn:null,
-          confirmadoPor:null,
-          comprobante:null,
-          observacion:"Valor pendiente de liquidación por Tesorería."
-        };
-      }
-    });
-    savePagos(all); return all;
-  }
-
-  window.uanPagosV63=asegurarObligaciones;
-
-  window.renderTesoreriaUAN=function(){
-    if(!isTesoreria() && !isAdmin()){
-      abrirModal(`<div class="status-modal"><h2>Acceso restringido</h2><p>Este módulo es exclusivo de Tesorería.</p></div>`);return;
-    }
-    const all=asegurarObligaciones(), estudiantes=getEstudiantes();
-    const q=(document.getElementById("v63PagoQ")?.value||"").toLowerCase();
-    const rows=Object.values(all).filter(p=>{
-      const e=estudiantes[p.codigo]||{};
-      return !q || `${p.codigo} ${e.nombre||""} ${p.estado} ${p.periodo}`.toLowerCase().includes(q);
-    }).map(p=>{
-      const e=estudiantes[p.codigo]||{};
-      const intento=p.intentoPago;
-      const action=p.estado==="Pagado"
-        ? `<button class="btn-secundario" onclick="uanVerPagoV63('${escAttr(p.codigo)}')">👁 Ver</button><button class="btn-peligro" onclick="uanRevertirPagoV63('${escAttr(p.codigo)}')">↩ Revertir</button>`
-        : `<button onclick="uanGestionarPagoV63('${escAttr(p.codigo)}')">💳 Gestionar</button>${intento?`<button class="btn-secundario" onclick="uanConfirmarIntentoPagoV64('${escAttr(p.codigo)}')">✓ Confirmar pago</button>`:""}`;
-      return `<tr>
-        <td><b>${escAttr(p.codigo)}</b></td>
-        <td>${escAttr(e.nombre||"Estudiante")}</td>
-        <td>${escAttr(e.programa||"—")}</td>
-        <td>$${dinero(p.valor)}</td>
-        <td><span class="uan-pill ${p.estado==="Pagado"?"uan-payment-ok":p.estado==="Vencido"?"uan-payment-bad":"uan-payment-pending"}">${escAttr(p.estado)}</span></td>
-        <td>${escAttr(p.pagadoEn?formatearFechaHoraCorta(p.pagadoEn):"—")}</td>
-        <td>${action}</td>
-      </tr>`;
-    }).join("");
-
-    const vals=Object.values(all);
-    const pendientes=vals.filter(p=>p.estado!=="Pagado").length;
-    const pagados=vals.filter(p=>p.estado==="Pagado").length;
-    const recaudado=vals.filter(p=>p.estado==="Pagado").reduce((s,p)=>s+Number(p.valor||0),0);
-    document.getElementById("contenido").innerHTML=`
-      <div class="uan-module-shell">
-        <div class="uan-module-hero"><span>TESORERÍA · MATRÍCULA Y PAGOS</span><h1>Gestión financiera</h1><p>Liquida obligaciones, confirma pagos y genera comprobantes. El estudiante solo puede consultar su estado.</p></div>
-        <div class="uan-kpi-grid">
-          <div><span>PENDIENTES</span><b>${pendientes}</b></div>
-          <div><span>PAGADOS</span><b>${pagados}</b></div>
-          <div><span>RECAUDADO</span><b>$${dinero(recaudado)}</b></div>
-          <div><span>ESTUDIANTES</span><b>${Object.keys(estudiantes).length}</b></div>
-        </div>
-        <section class="uan-card">
-          <div class="uan-module-toolbar">
-            <input id="v63PagoQ" placeholder="Buscar estudiante, código o estado..." oninput="renderTesoreriaUAN()">
-            <button class="btn-secundario" onclick="uanRefrescarPagosV63()">↻ Actualizar</button>
-          </div>
-          <div class="uan-table-wrap"><table class="uan-table">
-            <thead><tr><th>Código</th><th>Estudiante</th><th>Programa</th><th>Valor</th><th>Estado</th><th>Pago</th><th>Acciones</th></tr></thead>
-            <tbody>${rows||`<tr><td colspan="7">No hay obligaciones registradas.</td></tr>`}</tbody>
-          </table></div>
-          <p class="uan-help-note">Un estudiante con matrícula pendiente conserva su obligación como <b>Pendiente</b> hasta que Tesorería confirme el pago.</p>
-        </section>
-      </div>`;
-    const input=document.getElementById("v63PagoQ"); if(input)input.value=q;
-  };
-
-  window.uanRefrescarPagosV63=function(){asegurarObligaciones();renderTesoreriaUAN()};
-
-  window.uanGestionarPagoV63=function(codigo){
-    if(!isTesoreria()&&!isAdmin())return;
-    const p=asegurarObligaciones()[codigo], e=getEstudiantes()[codigo]||{};
-    if(!p)return;
-    abrirModal(`<div class="status-modal">
-      <div class="status-modal-kicker">OBLIGACIÓN · ${escAttr(codigo)}</div>
-      <h2>${escAttr(e.nombre||"Estudiante")}</h2>
-      <p><b>Programa:</b> ${escAttr(e.programa||"—")}<br><b>Periodo:</b> ${escAttr(p.periodo)}</p>
-      <label>Valor de matrícula (COP)<input id="v63ValorPago" type="number" min="0" step="1000" value="${Number(p.valor||0)}"></label>
-      <label>Estado<select id="v63EstadoPago">
-        <option ${p.estado==="Pendiente"?"selected":""}>Pendiente</option>
-        <option ${p.estado==="Vencido"?"selected":""}>Vencido</option>
-        <option ${p.estado==="Pagado"?"selected":""}>Pagado</option>
-      </select></label>
-      <label>Observación<textarea id="v63ObsPago">${escAttr(p.observacion||"")}</textarea></label>
-      <button onclick="uanGuardarPagoV63('${escAttr(codigo)}')">💾 Guardar obligación</button>
-    </div>`);
-  };
-
-  window.uanGuardarPagoV63=function(codigo){
-    if(!isTesoreria()&&!isAdmin())return;
-    const all=asegurarObligaciones(), p=all[codigo]; if(!p)return;
-    const valor=Number(document.getElementById("v63ValorPago")?.value||0);
-    const estado=document.getElementById("v63EstadoPago")?.value||"Pendiente";
-    p.valor=valor;
-    p.estado=estado;
-    p.observacion=document.getElementById("v63ObsPago")?.value.trim()||"";
-    p.actualizadoEn=hoy();
-    if(estado==="Pagado"){
-      p.pagadoEn=p.pagadoEn||hoy();
-      p.confirmadoPor=usuarioActual.usuario;
-      p.comprobante=p.comprobante||`COMP-${Date.now()}`;
-    }else{
-      p.pagadoEn=null;p.confirmadoPor=null;p.comprobante=null;
-    }
-    all[codigo]=p;savePagos(all);
-    try{uanRegistrarAuditoria("Actualización de obligación financiera",`${codigo} · ${estado}`)}catch(e){}
-    try{uanCrearNotificacion("Estado financiero actualizado",`${p.concepto}: ${estado}`,"info","renderFinanzasUAN()",[{value:codigo,rol:""}])}catch(e){}
-    cerrarModal();renderTesoreriaUAN();
-  };
-
-  window.uanVerPagoV63=function(codigo){
-    const p=asegurarObligaciones()[codigo],e=getEstudiantes()[codigo]||{};if(!p)return;
-    abrirModal(`<div class="status-modal"><div class="status-modal-kicker">COMPROBANTE FINANCIERO</div><h2>${escAttr(p.comprobante||"Sin comprobante")}</h2><p><b>Estudiante:</b> ${escAttr(e.nombre||"—")}<br><b>Código:</b> ${escAttr(codigo)}<br><b>Concepto:</b> ${escAttr(p.concepto)}<br><b>Valor:</b> $${dinero(p.valor)}<br><b>Estado:</b> ${escAttr(p.estado)}<br><b>Fecha de pago:</b> ${escAttr(p.pagadoEn?formatearFechaHoraCorta(p.pagadoEn):"—")}<br><b>Confirmado por:</b> ${escAttr(p.confirmadoPor||"—")}</p><button onclick="window.print()">🖨 Imprimir comprobante</button></div>`);
-  };
-
-  window.uanRevertirPagoV63=function(codigo){
-    if(!isTesoreria()&&!isAdmin())return;
-    const all=asegurarObligaciones(),p=all[codigo];if(!p)return;
-    if(!confirm(`¿Revertir el pago de ${codigo}? La obligación volverá a Pendiente.`))return;
-    p.estado="Pendiente";p.pagadoEn=null;p.confirmadoPor=null;p.comprobante=null;p.actualizadoEn=hoy();
-    p.observacion=(p.observacion?p.observacion+" · ":"")+"Pago revertido por Tesorería.";
-    savePagos(all);
-    try{uanRegistrarAuditoria("Reversión de pago",codigo)}catch(e){}
-    try{uanCrearNotificacion("Pago revertido",`${p.concepto} volvió a estado Pendiente.`,"warning","renderFinanzasUAN()",[{value:codigo,rol:""}])}catch(e){}
-    renderTesoreriaUAN();
-  };
-
-  /* Finanzas del estudiante: SOLO consulta. */
-  window.renderFinanzasUAN=function(){
-    const codigo=usuarioActual?.codigo||usuarioActual?.usuario;
-    const all=asegurarObligaciones(), p=all[codigo];
-    if(!p){
-      document.getElementById("contenido").innerHTML=`<div class="uan-module-shell"><div class="uan-module-hero"><span>FINANZAS</span><h1>Estado financiero</h1><p>No hay una obligación financiera registrada para esta cuenta.</p></div></div>`;return;
-    }
-    const estadoTexto=p.estado==="Pagado"?"Matrícula al día":p.estado==="Vencido"?"Matrícula vencida":"Matrícula pendiente";
-    document.getElementById("contenido").innerHTML=`
-      <div class="uan-module-shell">
-        <div class="uan-module-hero"><span>ESTUDIANTE · FINANZAS</span><h1>Estado financiero</h1><p>Consulta tus obligaciones y comprobantes. Las confirmaciones de pago las realiza Tesorería.</p></div>
-        <div class="uan-kpi-grid">
-          <div><span>OBLIGACIÓN</span><b>$${dinero(p.valor)}</b></div>
-          <div><span>ESTADO</span><b>${escAttr(estadoTexto)}</b></div>
-          <div><span>PERIODO</span><b>${escAttr(p.periodo)}</b></div>
-        </div>
-        <section class="uan-card">
-          <span class="uan-card-kicker">MATRÍCULA</span><h2>${escAttr(p.concepto)}</h2>
-          <div class="uan-stat-list">
-            <div><span>Valor</span><b>$${dinero(p.valor)}</b></div>
-            <div><span>Estado</span><b>${escAttr(p.estado)}</b></div>
-            <div><span>Fecha de pago</span><b>${escAttr(p.pagadoEn?formatearFechaHoraCorta(p.pagadoEn):"No registrado")}</b></div>
-            <div><span>Comprobante</span><b>${escAttr(p.comprobante||"Pendiente")}</b></div>
-          </div>
-          ${p.estado!=="Pagado"?`<div class="uan-warning-box">⚠️ <b>Tu matrícula aún no está confirmada como pagada.</b><br>Debes realizar el pago por el canal institucional correspondiente. Tesorería actualizará el estado una vez verificado.</div>`:`<div class="uan-success-box">✓ Matrícula confirmada por Tesorería. Guarda tu comprobante.</div>`}
-          ${p.estado==="Pagado"?`<button onclick="uanVerPagoV63('${escAttr(codigo)}')">📄 Ver comprobante</button>`:""}
-        </section>
-      </div>`;
-  };
-
-  /* Compatibilidad con el menú actual */
-  window.renderBibliotecarioUAN=function(){
-    if(usuarioActual?.rol!=="biblioteca"){abrirModal(`<div class="status-modal"><h2>Acceso restringido</h2><p>Este módulo corresponde a Biblioteca.</p></div>`);return;}
-    document.getElementById("contenido").innerHTML=`<div class="uan-module-shell"><div class="uan-module-hero"><span>BIBLIOTECA · OPERACIÓN</span><h1>Gestión de Biblioteca</h1><p>Controla catálogo, préstamos, devoluciones y reservas.</p></div><div class="uan-service-grid">
-      <article class="uan-service-card"><span class="uan-service-icon">📚</span><div><h3>Catálogo</h3><p>Consulta y administra recursos.</p><button onclick="renderBibliotecaUAN()">Abrir catálogo</button></div></article>
-      <article class="uan-service-card"><span class="uan-service-icon">🤝</span><div><h3>Préstamos</h3><p>Registra entrega y devolución.</p><button onclick="uanGestionarPrestamosV63()">Gestionar préstamos</button></div></article>
-      <article class="uan-service-card"><span class="uan-service-icon">📅</span><div><h3>Reservas</h3><p>Revisa reservas pendientes.</p><button onclick="uanGestionarReservasV63()">Gestionar reservas</button></div></article>
-    </div></div>`;
-  };
-  window.uanGestionarPrestamosV63=function(){abrirModal(`<div class="status-modal"><h2>Préstamos de biblioteca</h2><p>El bibliotecario registra la entrega, devolución y estado del material.</p></div>`)};
-  window.uanGestionarReservasV63=function(){abrirModal(`<div class="status-modal"><h2>Reservas</h2><p>El bibliotecario revisa y aprueba las reservas de material.</p></div>`)};
-
-  /* Reemplazar los roles hard-coded en la sesión si existen en cuentas. */
-  window.uanCuentasServicioV63={
-    biblio:{usuario:"biblio",password:"1",rol:"biblioteca",nombre:"Bibliotecario UAN"},
-    tesoreria:{usuario:"tesoreria",password:"1",rol:"tesoreria",nombre:"Tesorería UAN"}
-  };
-})();
 
 
 
@@ -10066,7 +9911,7 @@ window.uanProgramOptionsV60=function(selected){
             <button onclick="renderSeguimientoEstudianteV66()">Ver mis seguimientos</button>
           </section>
         </div>
-        <section class="uan-card v66-quick"><span>ACCESOS RÁPIDOS</span><div><button onclick="renderMateriasEstudiante()">📚 Mis materias</button><button onclick="renderFinanzasUAN()">💳 Finanzas</button><button onclick="renderTramitesUAN()">🗂️ Trámites</button><button onclick="renderMensajeriaUAN()">✉️ Correo</button></div></section>
+        <section class="uan-card v66-quick"><span>ACCESOS RÁPIDOS</span><div><button onclick="renderMateriasEstudiante()">📚 Mis materias</button><button onclick="renderTramitesUAN()">🗂️ Trámites</button><button onclick="renderMensajeriaUAN()">✉️ Correo</button></div></section>
       </div>`;
   };
 
@@ -10407,7 +10252,6 @@ window.uanProgramOptionsV60=function(selected){
 /* ================================================================
    UAN V71 — LIMPIEZA DEL MENÚ ESTUDIANTE
    Inicio académico se elimina: se conserva el Inicio normal.
-   Pagar matrícula queda una sola vez.
    ================================================================ */
 (function(){
   if(window.__uanV71MenuCleanup)return;
@@ -10417,27 +10261,10 @@ window.uanProgramOptionsV60=function(selected){
     oldSidebar.apply(this,arguments);
     const m=document.getElementById("menuDinamico");
     if(!m||!usuarioActual)return;
-
-    // El Inicio normal pertenece al menú original; quitar solo el duplicado "Inicio académico".
     m.querySelectorAll(".menu-item").forEach(el=>{
       const t=(el.textContent||"").replace(/\s+/g," ").trim().toLowerCase();
       if(t.includes("inicio académico")) el.remove();
     });
-
-    // Eliminar cualquier pago duplicado y reconstruir un único acceso.
-    const payments=[...m.querySelectorAll(".menu-item")].filter(el=>{
-      const t=(el.textContent||"").replace(/\s+/g," ").trim().toLowerCase();
-      return t.includes("pagar matrícula");
-    });
-    payments.slice(1).forEach(el=>el.remove());
-
-    if(usuarioActual.rol==="estudiante" && payments.length===0){
-      m.insertAdjacentHTML("beforeend",`<div class="menu-item uan-v71-payment" onclick="renderPagoMatriculaV64()">💳 Pagar matrícula <span>›</span></div>`);
-    }
-
-    // Eliminar cualquier viejo item de pago V64/V66/V70 sobrante por clase.
-    const pay=[...m.querySelectorAll(".menu-item")].filter(el=>(el.textContent||"").toLowerCase().includes("pagar matrícula"));
-    pay.slice(1).forEach(el=>el.remove());
   };
   window.__uanV71MenuCleanup=true;
 })();
